@@ -1,12 +1,59 @@
-# Astro on Netlify Platform Starter
+# SharePoint Assistant
 
-[Live Demo](https://astro-platform-starter.netlify.app/)
+An AI-powered SharePoint management assistant with Power Automate integration, built on Netlify.
 
-A modern starter based on Astro.js, Tailwind, and [Netlify Core Primitives](https://docs.netlify.com/core/overview/#develop) (Edge Functions, Image CDN, Blobs).
+## Overview
 
-## Astro Commands
+This application provides a natural language interface to manage SharePoint conversations, send emails, book meetings, and update SharePoint items through OpenAI and Power Automate flows.
 
-All commands are run from the root of the project, from a terminal:
+## Features
+
+- **Natural Language Interface**: Chat with an AI assistant powered by OpenAI
+- **SharePoint Integration**: Query and manage SharePoint conversation records
+- **Email Management**: Send emails and reply to existing threads
+- **Meeting Booking**: Create calendar events with Teams meeting links
+- **Item Management**: Update and delete SharePoint items
+- **Secure Configuration**: All credentials stored securely using Netlify Blobs
+
+## Setup
+
+### Prerequisites
+
+- Node.js v18.20.8+
+- OpenAI API key
+- Three Power Automate flows configured:
+  - Flow D1: Fetch SharePoint Data
+  - Flow D2: Perform SharePoint Action (send emails, book meetings)
+  - Flow D3: Manage SharePoint Item (update/delete)
+
+### Installation
+
+1. Clone this repository
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Deploy to Netlify or run locally:
+   ```bash
+   npm run dev
+   ```
+
+4. Visit the deployed site and complete the setup wizard at `/setup`
+
+## Usage
+
+1. **Initial Setup**: On first visit, you'll be redirected to the setup wizard
+   - Enter your OpenAI API key and model name
+   - Add your three Power Automate flow URLs
+   - Test all connections before saving
+
+2. **Using the Assistant**: Navigate to `/assistant` to start chatting
+   - Ask to fetch conversation records
+   - Request to send emails or book meetings
+   - Update or delete SharePoint items through natural language
+
+## Development Commands
 
 | Command                   | Action                                           |
 | :------------------------ | :----------------------------------------------- |
@@ -14,30 +61,18 @@ All commands are run from the root of the project, from a terminal:
 | `npm run dev`             | Starts local dev server at `localhost:4321`      |
 | `npm run build`           | Build your production site to `./dist/`          |
 | `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
 
-## Deploying to Netlify
+## Technology Stack
 
-[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/netlify-templates/astro-platform-starter)
+- **Frontend**: Astro with Tailwind CSS
+- **Backend**: Netlify Serverless Functions
+- **AI**: OpenAI Chat Completions API with function calling
+- **Storage**: Netlify Blobs for secure configuration
+- **Integration**: Power Automate HTTP triggers
 
-## Developing Locally
+## Security
 
-| Prerequisites                                                                |
-| :--------------------------------------------------------------------------- |
-| [Node.js](https://nodejs.org/) v18.20.8+.                                    |
-| (optional) [nvm](https://github.com/nvm-sh/nvm) for Node version management. |
-
-1. Clone this repository, then run `npm install` in its root directory.
-
-2. Recommended: link your local repository to a Netlify project. This will ensure you're using the same runtime version for both local development and your deployed project.
-
-```
-netlify link
-```
-
-3. Run the Astro.js development server:
-
-```
-npm run dev
-```
+- No API keys or secrets are stored in source code
+- All configuration is stored securely in Netlify Blobs
+- Environment-based configuration approach
+- Connections tested before saving

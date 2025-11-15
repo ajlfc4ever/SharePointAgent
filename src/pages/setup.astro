@@ -1,0 +1,453 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Setup Wizard - SharePoint Assistant">
+    <main class="mx-auto max-w-4xl px-4 py-8">
+        <h1 class="text-3xl font-bold mb-8">Setup Wizard</h1>
+        
+        <div id="config-status-banner" class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 hidden">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold text-blue-900">Configuration Already Exists</h2>
+                    <p class="text-sm text-blue-700 mt-1">
+                        <span id="config-status-text"></span>
+                    </p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">Connected</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="setup-container" class="space-y-6">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4">OpenAI Configuration</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label for="openai-key" class="block text-sm font-medium mb-2">OpenAI API Key</label>
+                        <input 
+                            type="password" 
+                            id="openai-key" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="sk-..."
+                        />
+                    </div>
+                    <div>
+                        <label for="openai-model" class="block text-sm font-medium mb-2">Realtime API Model</label>
+                        <select 
+                            id="openai-model" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            <option value="gpt-realtime">gpt-realtime (Recommended)</option>
+                            <option value="gpt-4o-realtime-preview-2024-10-01">gpt-4o-realtime-preview-2024-10-01</option>
+                            <option value="gpt-4o-mini-realtime-preview-2024-12-17">gpt-4o-mini-realtime-preview-2024-12-17</option>
+                        </select>
+                        <p class="mt-1 text-sm text-gray-500">Using OpenAI Realtime API for voice interactions with real-time audio streaming.</p>
+                    </div>
+                    <div>
+                        <label for="voice-selection" class="block text-sm font-medium mb-2">Voice Selection</label>
+                        <select 
+                            id="voice-selection" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            <option value="alloy">Alloy (Neutral)</option>
+                            <option value="ash">Ash</option>
+                            <option value="ballad">Ballad</option>
+                            <option value="coral">Coral</option>
+                            <option value="echo">Echo</option>
+                            <option value="sage">Sage</option>
+                            <option value="shimmer">Shimmer</option>
+                            <option value="verse">Verse</option>
+                            <option value="marin">Marin (gpt-realtime only)</option>
+                            <option value="cedar">Cedar (gpt-realtime only)</option>
+                        </select>
+                        <p class="mt-1 text-sm text-gray-500">Choose the voice for the AI assistant's speech output.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4">Power Automate Flow URLs</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label for="fetch-url" class="block text-sm font-medium mb-2">Fetch SharePoint Data URL (Flow D1)</label>
+                        <input 
+                            type="url" 
+                            id="fetch-url" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="https://..."
+                        />
+                    </div>
+                    <div>
+                        <label for="action-url" class="block text-sm font-medium mb-2">Perform SharePoint Action URL (Flow D2)</label>
+                        <input 
+                            type="url" 
+                            id="action-url" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="https://..."
+                        />
+                    </div>
+                    <div>
+                        <label for="manage-url" class="block text-sm font-medium mb-2">Manage SharePoint Item URL (Flow D3)</label>
+                        <input 
+                            type="url" 
+                            id="manage-url" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="https://..."
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <div id="test-results" class="bg-white rounded-lg shadow p-6 hidden">
+                <h2 class="text-xl font-semibold mb-4">Test Results</h2>
+                <div id="test-output" class="space-y-2"></div>
+            </div>
+
+            <div class="flex gap-4">
+                <button 
+                    id="test-btn" 
+                    class="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    Test Configuration
+                </button>
+                <button 
+                    id="save-btn" 
+                    class="px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    Save & Continue
+                </button>
+                <button 
+                    id="reset-btn" 
+                    class="px-6 py-3 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed hidden"
+                >
+                    Reset Configuration
+                </button>
+            </div>
+
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h3 class="font-semibold text-blue-900 mb-2">Need More Customization?</h3>
+                <p class="text-sm text-blue-800 mb-2">
+                    After saving, visit <a href="/settings" class="underline font-semibold">Advanced Settings</a> to configure:
+                </p>
+                <ul class="text-sm text-blue-800 list-disc ml-5 space-y-1">
+                    <li>Text chat model selection (GPT-5.1, GPT-5, GPT-4o, etc.)</li>
+                    <li>Custom AI instructions and behavior</li>
+                    <li>JSON schemas for Power Automate function responses</li>
+                    <li>Temperature, VAD settings, and other parameters</li>
+                </ul>
+            </div>
+
+            <div id="status-message" class="p-4 rounded-md hidden"></div>
+        </div>
+    </main>
+</Layout>
+
+<script>
+    const testBtn = document.getElementById('test-btn') as HTMLButtonElement;
+    const saveBtn = document.getElementById('save-btn') as HTMLButtonElement;
+    const resetBtn = document.getElementById('reset-btn') as HTMLButtonElement;
+    const testResults = document.getElementById('test-results') as HTMLDivElement;
+    const testOutput = document.getElementById('test-output') as HTMLDivElement;
+    const statusMessage = document.getElementById('status-message') as HTMLDivElement;
+    const configStatusBanner = document.getElementById('config-status-banner') as HTMLDivElement;
+    const configStatusText = document.getElementById('config-status-text') as HTMLSpanElement;
+
+    let hasExistingConfig = false;
+    let configMetadata: { lastUpdated?: string, configHistory?: Array<{ timestamp: string, action: string }> } = {};
+
+    function maskApiKey(key: string): string {
+        if (!key || key.length < 8) return key;
+        return `${key.substring(0, 7)}...${key.substring(key.length - 4)}`;
+    }
+
+    async function loadExistingConfig() {
+        try {
+            const response = await fetch('/api/save-config');
+            if (response.ok) {
+                const data = await response.json();
+                if (data.exists) {
+                    hasExistingConfig = true;
+                    resetBtn.classList.remove('hidden');
+                    
+                    const configResponse = await fetch('/api/get-config');
+                    if (configResponse.ok) {
+                        const config = await configResponse.json();
+                        
+                        if (config.lastUpdated) {
+                            const lastUpdated = new Date(config.lastUpdated);
+                            configStatusText.textContent = `Last updated: ${lastUpdated.toLocaleString()}`;
+                            configStatusBanner.classList.remove('hidden');
+                        }
+                        
+                        if (config.configHistory) {
+                            configMetadata.configHistory = config.configHistory;
+                        }
+                        
+                        if (config.openaiKey) {
+                            const maskedKey = maskApiKey(config.openaiKey);
+                            (document.getElementById('openai-key') as HTMLInputElement).value = maskedKey;
+                            (document.getElementById('openai-key') as HTMLInputElement).dataset.fullKey = config.openaiKey;
+                            (document.getElementById('openai-key') as HTMLInputElement).placeholder = 'Enter new key or leave as is';
+                        }
+                        if (config.openaiModel) {
+                            (document.getElementById('openai-model') as HTMLSelectElement).value = config.openaiModel;
+                        }
+                        if (config.voice) {
+                            (document.getElementById('voice-selection') as HTMLSelectElement).value = config.voice;
+                        }
+                        if (config.fetchUrl) {
+                            (document.getElementById('fetch-url') as HTMLInputElement).value = config.fetchUrl;
+                        }
+                        if (config.actionUrl) {
+                            (document.getElementById('action-url') as HTMLInputElement).value = config.actionUrl;
+                        }
+                        if (config.manageUrl) {
+                            (document.getElementById('manage-url') as HTMLInputElement).value = config.manageUrl;
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load existing config:', error);
+        }
+    }
+
+    loadExistingConfig();
+
+    function showStatus(message: string, type: 'success' | 'error' | 'info') {
+        statusMessage.textContent = message;
+        statusMessage.className = `p-4 rounded-md ${
+            type === 'success' ? 'bg-green-100 text-green-800' :
+            type === 'error' ? 'bg-red-100 text-red-800' :
+            'bg-blue-100 text-blue-800'
+        }`;
+        statusMessage.classList.remove('hidden');
+    }
+
+    function addTestResult(name: string, status: 'success' | 'error', message: string) {
+        const resultDiv = document.createElement('div');
+        resultDiv.className = `p-3 rounded ${status === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`;
+        resultDiv.innerHTML = `
+            <div class="font-medium">${name}</div>
+            <div class="text-sm">${message}</div>
+        `;
+        testOutput.appendChild(resultDiv);
+    }
+
+    testBtn.addEventListener('click', async () => {
+        const openaiKeyInput = document.getElementById('openai-key') as HTMLInputElement;
+        let openaiKey = openaiKeyInput.value;
+        
+        if (openaiKeyInput.dataset.fullKey && openaiKey === maskApiKey(openaiKeyInput.dataset.fullKey)) {
+            openaiKey = openaiKeyInput.dataset.fullKey;
+        }
+        
+        const openaiModel = (document.getElementById('openai-model') as HTMLInputElement).value;
+        const voice = (document.getElementById('voice-selection') as HTMLSelectElement).value;
+        const fetchUrl = (document.getElementById('fetch-url') as HTMLInputElement).value;
+        const actionUrl = (document.getElementById('action-url') as HTMLInputElement).value;
+        const manageUrl = (document.getElementById('manage-url') as HTMLInputElement).value;
+
+        if (!openaiKey || !openaiModel || !voice || !fetchUrl || !actionUrl || !manageUrl) {
+            showStatus('Please fill in all fields', 'error');
+            return;
+        }
+
+        testBtn.disabled = true;
+        testBtn.textContent = 'Testing...';
+        testResults.classList.remove('hidden');
+        testOutput.innerHTML = '';
+
+        try {
+            const response = await fetch('/api/test-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    openaiKey,
+                    openaiModel,
+                    voice,
+                    fetchUrl,
+                    actionUrl,
+                    manageUrl
+                })
+            });
+
+            if (!response.ok) {
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const errorData = await response.json();
+                    throw new Error(`Test API error (${response.status}): ${errorData.message || errorData.error || 'Unknown error'}`);
+                } else {
+                    const text = await response.text();
+                    throw new Error(`Test API error (${response.status}): Expected JSON but got ${contentType}. Response: ${text.substring(0, 200)}`);
+                }
+            }
+
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                throw new Error(`Test API returned non-JSON response. Content-Type: ${contentType}. Response: ${text.substring(0, 200)}`);
+            }
+
+            const result = await response.json();
+
+            if (result.openai?.success) {
+                addTestResult('OpenAI Connection', 'success', result.openai.message);
+            } else {
+                addTestResult('OpenAI Connection', 'error', result.openai?.message || 'Failed');
+            }
+
+            if (result.fetchFlow?.success) {
+                addTestResult('Fetch Flow (D1)', 'success', result.fetchFlow.message);
+            } else {
+                addTestResult('Fetch Flow (D1)', 'error', result.fetchFlow?.message || 'Failed');
+            }
+
+            if (result.actionFlow?.success) {
+                addTestResult('Action Flow (D2)', 'success', result.actionFlow.message);
+            } else {
+                addTestResult('Action Flow (D2)', 'error', result.actionFlow?.message || 'Failed');
+            }
+
+            if (result.manageFlow?.success) {
+                addTestResult('Manage Flow (D3)', 'success', result.manageFlow.message);
+            } else {
+                addTestResult('Manage Flow (D3)', 'error', result.manageFlow?.message || 'Failed');
+            }
+
+            if (result.allSuccess) {
+                showStatus('All tests passed!', 'success');
+            } else {
+                showStatus('Some tests failed. Please check the configuration.', 'error');
+            }
+        } catch (error) {
+            console.error('Test configuration error:', error);
+            showStatus(`Test Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+            addTestResult('Test Failed', 'error', error instanceof Error ? error.message : 'Unknown error');
+        } finally {
+            testBtn.disabled = false;
+            testBtn.textContent = 'Test Configuration';
+        }
+    });
+
+    saveBtn.addEventListener('click', async () => {
+        if (hasExistingConfig) {
+            const confirmed = confirm('You already have a saved configuration. Do you want to overwrite it with these new settings?');
+            if (!confirmed) {
+                return;
+            }
+        }
+
+        const openaiKeyInput = document.getElementById('openai-key') as HTMLInputElement;
+        let openaiKey = openaiKeyInput.value;
+        
+        if (openaiKeyInput.dataset.fullKey && openaiKey === maskApiKey(openaiKeyInput.dataset.fullKey)) {
+            openaiKey = openaiKeyInput.dataset.fullKey;
+        }
+        
+        const openaiModel = (document.getElementById('openai-model') as HTMLInputElement).value;
+        const voice = (document.getElementById('voice-selection') as HTMLSelectElement).value;
+        const fetchUrl = (document.getElementById('fetch-url') as HTMLInputElement).value;
+        const actionUrl = (document.getElementById('action-url') as HTMLInputElement).value;
+        const manageUrl = (document.getElementById('manage-url') as HTMLInputElement).value;
+
+        if (!openaiKey || !openaiModel || !voice || !fetchUrl || !actionUrl || !manageUrl) {
+            showStatus('Please fill in all fields before saving', 'error');
+            return;
+        }
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+
+        try {
+            const response = await fetch('/api/save-config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    openaiKey,
+                    openaiModel,
+                    voice,
+                    fetchUrl,
+                    actionUrl,
+                    manageUrl
+                })
+            });
+
+            if (!response.ok) {
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const errorData = await response.json();
+                    throw new Error(`Save API error (${response.status}): ${errorData.message || errorData.error || 'Unknown error'}`);
+                } else {
+                    const text = await response.text();
+                    throw new Error(`Save API error (${response.status}): Expected JSON but got ${contentType}. Response: ${text.substring(0, 200)}`);
+                }
+            }
+
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                throw new Error(`Save API returned non-JSON response. Content-Type: ${contentType}. Response: ${text.substring(0, 200)}`);
+            }
+
+            const result = await response.json();
+
+            if (result.success) {
+                showStatus('Configuration saved successfully! Redirecting to assistant...', 'success');
+                document.getElementById('setup-container')!.style.display = 'none';
+                setTimeout(() => {
+                    window.location.href = '/assistant';
+                }, 2000);
+            } else {
+                showStatus(`Failed to save: ${result.message}`, 'error');
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save & Continue';
+            }
+        } catch (error) {
+            console.error('Save configuration error:', error);
+            showStatus(`Save Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save & Continue';
+        }
+    });
+
+    resetBtn.addEventListener('click', async () => {
+        const confirmed = confirm('Are you sure you want to delete your saved configuration? This action cannot be undone.');
+        if (!confirmed) {
+            return;
+        }
+
+        resetBtn.disabled = true;
+        resetBtn.textContent = 'Resetting...';
+
+        try {
+            const response = await fetch('/api/reset-config', {
+                method: 'POST'
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to reset configuration');
+            }
+
+            const result = await response.json();
+
+            if (result.success) {
+                showStatus('Configuration reset successfully! Reloading...', 'success');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            } else {
+                showStatus(`Failed to reset: ${result.message}`, 'error');
+                resetBtn.disabled = false;
+                resetBtn.textContent = 'Reset Configuration';
+            }
+        } catch (error) {
+            console.error('Reset configuration error:', error);
+            showStatus(`Reset Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+            resetBtn.disabled = false;
+            resetBtn.textContent = 'Reset Configuration';
+        }
+    });
+</script>
