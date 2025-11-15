@@ -1,0 +1,222 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Setup Instructions - SharePoint Assistant">
+    <main class="mx-auto max-w-4xl px-4 py-8">
+        <h1 class="text-3xl font-bold mb-8">Setup Instructions</h1>
+        
+        <div class="space-y-8">
+            <section class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-2xl font-semibold mb-4">Required Configuration Parameters</h2>
+                <p class="text-gray-700 mb-4">To use the SharePoint Voice Assistant, you need to configure the following parameters:</p>
+                
+                <div class="space-y-6">
+                    <div class="border-l-4 border-blue-500 pl-4">
+                        <h3 class="text-xl font-semibold mb-2">1. OpenAI API Key</h3>
+                        <p class="text-gray-700 mb-2"><strong>Parameter:</strong> OpenAI API Key</p>
+                        <p class="text-gray-700 mb-2"><strong>Format:</strong> Starts with <code class="bg-gray-100 px-2 py-1 rounded">sk-</code></p>
+                        <p class="text-gray-700 mb-4"><strong>Description:</strong> This is your secret API key from OpenAI that allows the application to connect to OpenAI's Realtime API for voice interactions.</p>
+                        
+                        <div class="bg-blue-50 border border-blue-200 rounded p-4">
+                            <h4 class="font-semibold mb-2">How to obtain:</h4>
+                            <ol class="list-decimal ml-5 space-y-2 text-gray-700">
+                                <li>Go to <a href="https://platform.openai.com/" target="_blank" class="text-blue-600 hover:underline">https://platform.openai.com/</a></li>
+                                <li>Sign up or log in to your account</li>
+                                <li>Navigate to the API section</li>
+                                <li>Click on "API keys" in the left sidebar</li>
+                                <li>Click "Create new secret key"</li>
+                                <li>Give your key a name (e.g., "SharePoint Assistant")</li>
+                                <li>Copy the key immediately (you won't be able to see it again)</li>
+                                <li>Store it securely</li>
+                            </ol>
+                            <p class="mt-3 text-sm text-gray-600"><strong>Note:</strong> You need an OpenAI account with billing enabled to use the Realtime API.</p>
+                        </div>
+                    </div>
+
+                    <div class="border-l-4 border-green-500 pl-4">
+                        <h3 class="text-xl font-semibold mb-2">2. Realtime API Model</h3>
+                        <p class="text-gray-700 mb-2"><strong>Parameter:</strong> Model Selection</p>
+                        <p class="text-gray-700 mb-2"><strong>Options:</strong></p>
+                        <ul class="list-disc ml-5 space-y-1 text-gray-700 mb-4">
+                            <li><code class="bg-gray-100 px-2 py-1 rounded">gpt-realtime</code> (Recommended - Latest production model)</li>
+                            <li><code class="bg-gray-100 px-2 py-1 rounded">gpt-4o-realtime-preview-2024-10-01</code> (Preview version)</li>
+                            <li><code class="bg-gray-100 px-2 py-1 rounded">gpt-4o-mini-realtime-preview-2024-12-17</code> (Smaller, faster model)</li>
+                        </ul>
+                        <p class="text-gray-700 mb-4"><strong>Description:</strong> The AI model used for voice conversations. The latest <code class="bg-gray-100 px-2 py-1 rounded">gpt-realtime</code> model provides improved instruction following and more natural speech.</p>
+                        
+                        <div class="bg-green-50 border border-green-200 rounded p-4">
+                            <h4 class="font-semibold mb-2">How to choose:</h4>
+                            <ul class="list-disc ml-5 space-y-2 text-gray-700">
+                                <li><strong>gpt-realtime:</strong> Best choice for production use. 20% cheaper than preview models with better performance.</li>
+                                <li><strong>gpt-4o-realtime-preview:</strong> Use if you need a specific preview feature or are testing.</li>
+                                <li><strong>gpt-4o-mini-realtime-preview:</strong> Use for development/testing or if cost is a primary concern.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="border-l-4 border-yellow-500 pl-4">
+                        <h3 class="text-xl font-semibold mb-2">3. Voice Selection</h3>
+                        <p class="text-gray-700 mb-2"><strong>Parameter:</strong> Voice</p>
+                        <p class="text-gray-700 mb-2"><strong>Options:</strong></p>
+                        <ul class="list-disc ml-5 space-y-1 text-gray-700 mb-4">
+                            <li><code class="bg-gray-100 px-2 py-1 rounded">alloy</code> - Neutral voice</li>
+                            <li><code class="bg-gray-100 px-2 py-1 rounded">ash</code> - Available voice</li>
+                            <li><code class="bg-gray-100 px-2 py-1 rounded">ballad</code> - Available voice</li>
+                            <li><code class="bg-gray-100 px-2 py-1 rounded">coral</code> - Available voice</li>
+                            <li><code class="bg-gray-100 px-2 py-1 rounded">echo</code> - Available voice</li>
+                            <li><code class="bg-gray-100 px-2 py-1 rounded">sage</code> - Available voice</li>
+                            <li><code class="bg-gray-100 px-2 py-1 rounded">shimmer</code> - Available voice</li>
+                            <li><code class="bg-gray-100 px-2 py-1 rounded">verse</code> - Available voice</li>
+                            <li><code class="bg-gray-100 px-2 py-1 rounded">marin</code> - Available for gpt-realtime model only</li>
+                            <li><code class="bg-gray-100 px-2 py-1 rounded">cedar</code> - Available for gpt-realtime model only</li>
+                        </ul>
+                        <p class="text-gray-700 mb-4"><strong>Description:</strong> The voice personality used for the assistant's speech output. Choose the voice that best suits your preference and use case.</p>
+                        
+                        <div class="bg-yellow-50 border border-yellow-200 rounded p-4">
+                            <h4 class="font-semibold mb-2">Voice Options:</h4>
+                            <ul class="list-disc ml-5 space-y-2 text-gray-700">
+                                <li><strong>Standard voices:</strong> alloy, ash, ballad, coral, echo, sage, shimmer, verse - Available on all Realtime API models</li>
+                                <li><strong>gpt-realtime exclusive voices:</strong> marin, cedar - Only available when using the gpt-realtime model specifically</li>
+                            </ul>
+                            <p class="mt-2 text-sm text-gray-600"><strong>Note:</strong> As of late 2025, OpenAI's Realtime API supports 10 different voices with varying characteristics. Select the one that best fits your use case.</p>
+                        </div>
+                    </div>
+
+                    <div class="border-l-4 border-purple-500 pl-4">
+                        <h3 class="text-xl font-semibold mb-2">4. Power Automate Flow URLs</h3>
+                        <p class="text-gray-700 mb-4"><strong>Description:</strong> These are HTTP webhook URLs from your Power Automate flows that connect to your SharePoint environment.</p>
+                        
+                        <div class="space-y-4">
+                            <div class="bg-purple-50 border border-purple-200 rounded p-4">
+                                <h4 class="font-semibold mb-2">Flow D1: Fetch SharePoint Data URL</h4>
+                                <p class="text-gray-700 mb-2"><strong>Purpose:</strong> Retrieves client communication records from SharePoint</p>
+                                <p class="text-gray-700 mb-2"><strong>Format:</strong> <code class="bg-gray-100 px-2 py-1 rounded text-xs">https://prod-XX.region.logic.azure.com:443/workflows/...</code></p>
+                                
+                                <h5 class="font-semibold mt-3 mb-2">How to obtain:</h5>
+                                <ol class="list-decimal ml-5 space-y-2 text-gray-700 text-sm">
+                                    <li>Open <a href="https://make.powerautomate.com/" target="_blank" class="text-blue-600 hover:underline">Power Automate</a></li>
+                                    <li>Create a new "Instant cloud flow"</li>
+                                    <li>Select "When an HTTP request is received" as the trigger</li>
+                                    <li>Add actions to query your SharePoint list (e.g., "Get items")</li>
+                                    <li>Add a "Response" action to return the data as JSON</li>
+                                    <li>Save the flow</li>
+                                    <li>Copy the "HTTP POST URL" from the trigger</li>
+                                </ol>
+                            </div>
+
+                            <div class="bg-purple-50 border border-purple-200 rounded p-4">
+                                <h4 class="font-semibold mb-2">Flow D2: Perform SharePoint Action URL</h4>
+                                <p class="text-gray-700 mb-2"><strong>Purpose:</strong> Sends emails, books meetings, or creates new SharePoint items</p>
+                                <p class="text-gray-700 mb-2"><strong>Format:</strong> <code class="bg-gray-100 px-2 py-1 rounded text-xs">https://prod-XX.region.logic.azure.com:443/workflows/...</code></p>
+                                
+                                <h5 class="font-semibold mt-3 mb-2">Expected input parameters:</h5>
+                                <ul class="list-disc ml-5 space-y-1 text-gray-700 text-sm">
+                                    <li><code>flow_type</code> (number): Type of action (e.g., 1 = send email, 2 = book meeting)</li>
+                                    <li><code>description</code> (text): Description of the action</li>
+                                    <li><code>client_name</code> (text): Client's name</li>
+                                    <li><code>client_email</code> (text): Client's email address</li>
+                                    <li><code>email_subject</code> (text): Email subject line</li>
+                                    <li><code>email_body</code> (text): Email content</li>
+                                </ul>
+                            </div>
+
+                            <div class="bg-purple-50 border border-purple-200 rounded p-4">
+                                <h4 class="font-semibold mb-2">Flow D3: Manage SharePoint Item URL</h4>
+                                <p class="text-gray-700 mb-2"><strong>Purpose:</strong> Updates or deletes existing SharePoint items</p>
+                                <p class="text-gray-700 mb-2"><strong>Format:</strong> <code class="bg-gray-100 px-2 py-1 rounded text-xs">https://prod-XX.region.logic.azure.com:443/workflows/...</code></p>
+                                
+                                <h5 class="font-semibold mt-3 mb-2">Expected input parameters:</h5>
+                                <ul class="list-disc ml-5 space-y-1 text-gray-700 text-sm">
+                                    <li><code>flow_type</code> (number): Type of management action (e.g., 1 = update, 2 = delete)</li>
+                                    <li><code>sharepoint_id</code> (text): The ID of the SharePoint item to manage</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-2xl font-semibold mb-4">Technical Details</h2>
+                
+                <div class="space-y-4">
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2">WebSocket Connection</h3>
+                        <p class="text-gray-700 mb-2">The application connects to OpenAI's Realtime API using WebSocket:</p>
+                        <ul class="list-disc ml-5 space-y-1 text-gray-700">
+                            <li><strong>Endpoint:</strong> <code class="bg-gray-100 px-2 py-1 rounded">wss://api.openai.com/v1/realtime</code></li>
+                            <li><strong>Protocol:</strong> WebSocket with subprotocol authentication</li>
+                            <li><strong>Audio Format:</strong> PCM16 at 24kHz sample rate</li>
+                        </ul>
+                    </div>
+
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2">Port Information</h3>
+                        <p class="text-gray-700 mb-2">The application uses standard web ports:</p>
+                        <ul class="list-disc ml-5 space-y-1 text-gray-700">
+                            <li><strong>Development:</strong> Port 8888 (via <code class="bg-gray-100 px-2 py-1 rounded">netlify dev</code>)</li>
+                            <li><strong>Production:</strong> Standard HTTPS (port 443) on Netlify</li>
+                            <li><strong>WebSocket:</strong> Connects over port 443 (HTTPS/WSS)</li>
+                        </ul>
+                    </div>
+
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2">Browser Requirements</h3>
+                        <p class="text-gray-700 mb-2">The voice features require:</p>
+                        <ul class="list-disc ml-5 space-y-1 text-gray-700">
+                            <li>Modern browser with WebSocket support (Chrome, Firefox, Safari, Edge)</li>
+                            <li>Microphone access permission</li>
+                            <li>Web Audio API support</li>
+                            <li>HTTPS connection (required for microphone access)</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <section class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-2xl font-semibold mb-4">Step-by-Step Setup Process</h2>
+                
+                <ol class="list-decimal ml-5 space-y-3 text-gray-700">
+                    <li>
+                        <strong>Get your OpenAI API Key</strong>
+                        <p class="text-sm mt-1">Follow the instructions in section 1 above to obtain your API key from OpenAI.</p>
+                    </li>
+                    <li>
+                        <strong>Create Power Automate Flows</strong>
+                        <p class="text-sm mt-1">Set up three HTTP-triggered flows in Power Automate for SharePoint integration.</p>
+                    </li>
+                    <li>
+                        <strong>Go to Setup Page</strong>
+                        <p class="text-sm mt-1">Navigate to the <a href="/setup" class="text-blue-600 hover:underline">Setup Wizard</a> in this application.</p>
+                    </li>
+                    <li>
+                        <strong>Enter Configuration</strong>
+                        <p class="text-sm mt-1">Fill in all the fields with your OpenAI API key, select a model, and paste your Power Automate flow URLs.</p>
+                    </li>
+                    <li>
+                        <strong>Test Configuration (Optional)</strong>
+                        <p class="text-sm mt-1">Optionally click "Test Configuration" to verify all connections work properly.</p>
+                    </li>
+                    <li>
+                        <strong>Save Settings</strong>
+                        <p class="text-sm mt-1">Click "Save & Continue" to store your configuration.</p>
+                    </li>
+                    <li>
+                        <strong>Start Using</strong>
+                        <p class="text-sm mt-1">Go to the Assistant page and click "Start Voice Session" to begin talking with your SharePoint assistant.</p>
+                    </li>
+                </ol>
+            </section>
+
+            <div class="text-center">
+                <a 
+                    href="/setup" 
+                    class="inline-block px-8 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
+                >
+                    Go to Setup Wizard
+                </a>
+            </div>
+        </div>
+    </main>
+</Layout>

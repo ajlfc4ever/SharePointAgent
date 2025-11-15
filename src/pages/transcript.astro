@@ -1,0 +1,107 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Transcript - SharePoint Assistant">
+    <main class="mx-auto max-w-4xl px-4 py-8">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold mb-2">Voice Session Transcript</h1>
+            <p class="text-gray-600">View the transcript of your voice conversation with the SharePoint Assistant.</p>
+        </header>
+
+        <div id="transcript-container" class="bg-white rounded-lg shadow overflow-hidden">
+            <div id="transcript-content" class="p-6">
+                <div class="text-center text-gray-500 py-8" id="empty-state">
+                    <p class="mb-4">No transcript available.</p>
+                    <p class="text-sm">Start a voice session from the <a href="/assistant" class="text-blue-600 hover:underline">Assistant page</a> to generate a transcript.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-6 flex gap-4 justify-center">
+            <a 
+                href="/assistant" 
+                class="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+                Back to Assistant
+            </a>
+            <button 
+                id="clear-transcript"
+                class="px-6 py-3 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 hidden"
+            >
+                Clear Transcript
+            </button>
+        </div>
+    </main>
+</Layout>
+
+<script>
+    const transcriptContent = document.getElementById('transcript-content') as HTMLDivElement;
+    const emptyState = document.getElementById('empty-state') as HTMLDivElement;
+    const clearButton = document.getElementById('clear-transcript') as HTMLButtonElement;
+
+    function loadTranscript() {
+        const transcriptData = sessionStorage.getItem('voiceTranscript');
+        
+        if (!transcriptData) {
+            return;
+        }
+
+        try {
+            const transcript = JSON.parse(transcriptData);
+            
+            if (!transcript || transcript.length === 0) {
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            clearButton.classList.remove('hidden');
+
+            const transcriptHtml = transcript.map((entry: {role: string, content: string}, index: number) => {
+                const isUser = entry.role === 'user';
+                const heading = isUser ? 'You said:' : 'Agent responded:';
+                const headingLevel = 'h2';
+                const bgColor = isUser ? 'bg-blue-50 border-l-4 border-blue-600' : 'bg-gray-50 border-l-4 border-gray-600';
+                
+                return `
+                    <div class="mb-6 ${bgColor} p-4 rounded" role="article" aria-labelledby="transcript-${index}">
+                        <${headingLevel} id="transcript-${index}" class="text-lg font-semibold mb-2 ${isUser ? 'text-blue-900' : 'text-gray-900'}">
+                            ${heading}
+                        </${headingLevel}>
+                        <div class="text-gray-800 whitespace-pre-wrap">
+                            ${escapeHtml(entry.content)}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            transcriptContent.innerHTML = `
+                <div class="space-y-4" role="feed" aria-label="Voice conversation transcript">
+                    ${transcriptHtml}
+                </div>
+            `;
+
+        } catch (error) {
+            console.error('Failed to load transcript:', error);
+            emptyState.innerHTML = `
+                <p class="text-red-600">Failed to load transcript.</p>
+                <p class="text-sm text-gray-600 mt-2">The transcript data may be corrupted.</p>
+            `;
+        }
+    }
+
+    function escapeHtml(text: string): string {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    clearButton.addEventListener('click', () => {
+        if (confirm('Are you sure you want to clear this transcript?')) {
+            sessionStorage.removeItem('voiceTranscript');
+            window.location.reload();
+        }
+    });
+
+    loadTranscript();
+</script>
