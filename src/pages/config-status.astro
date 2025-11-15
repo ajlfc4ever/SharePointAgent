@@ -1,0 +1,172 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Configuration Status - SharePoint Assistant">
+    <main class="mx-auto max-w-4xl px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold">Configuration Status</h1>
+            <div class="flex gap-2">
+                <a href="/settings" class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700">
+                    Advanced Settings
+                </a>
+                <a href="/setup" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                    Edit Configuration
+                </a>
+            </div>
+        </div>
+
+        <div id="loading" class="text-center py-12">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <p class="mt-4 text-gray-600">Loading configuration status...</p>
+        </div>
+
+        <div id="no-config" class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 hidden">
+            <h2 class="text-xl font-semibold text-yellow-900 mb-2">No Configuration Found</h2>
+            <p class="text-yellow-800 mb-4">You haven't set up your assistant yet.</p>
+            <a href="/setup" class="inline-block px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                Go to Setup
+            </a>
+        </div>
+
+        <div id="config-details" class="space-y-6 hidden">
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-semibold">Connection Status</h2>
+                    <span id="status-badge" class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                        Connected
+                    </span>
+                </div>
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between py-2 border-b">
+                        <span class="text-gray-600">Last Updated:</span>
+                        <span id="last-updated" class="font-medium"></span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b">
+                        <span class="text-gray-600">Setup Complete:</span>
+                        <span id="setup-complete" class="font-medium">Yes</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4">OpenAI Configuration</h2>
+                <div class="space-y-3 text-sm">
+                    <div class="flex justify-between py-2 border-b">
+                        <span class="text-gray-600">API Key:</span>
+                        <span id="api-key-masked" class="font-mono text-xs bg-gray-100 px-2 py-1 rounded"></span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b">
+                        <span class="text-gray-600">Model:</span>
+                        <span id="model" class="font-medium"></span>
+                    </div>
+                    <div class="flex justify-between py-2 border-b">
+                        <span class="text-gray-600">Voice:</span>
+                        <span id="voice" class="font-medium"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4">Power Automate Flows</h2>
+                <div class="space-y-3 text-sm">
+                    <div class="py-2 border-b">
+                        <div class="text-gray-600 mb-1">Fetch Flow (D1):</div>
+                        <div class="font-mono text-xs bg-gray-100 px-2 py-1 rounded break-all" id="fetch-url"></div>
+                    </div>
+                    <div class="py-2 border-b">
+                        <div class="text-gray-600 mb-1">Action Flow (D2):</div>
+                        <div class="font-mono text-xs bg-gray-100 px-2 py-1 rounded break-all" id="action-url"></div>
+                    </div>
+                    <div class="py-2">
+                        <div class="text-gray-600 mb-1">Manage Flow (D3):</div>
+                        <div class="font-mono text-xs bg-gray-100 px-2 py-1 rounded break-all" id="manage-url"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4">Configuration History</h2>
+                <div id="config-history" class="space-y-2">
+                </div>
+            </div>
+        </div>
+    </main>
+</Layout>
+
+<script>
+    const loading = document.getElementById('loading') as HTMLDivElement;
+    const noConfig = document.getElementById('no-config') as HTMLDivElement;
+    const configDetails = document.getElementById('config-details') as HTMLDivElement;
+
+    function maskApiKey(key: string): string {
+        if (!key || key.length < 8) return '••••••••';
+        return `${key.substring(0, 7)}...${key.substring(key.length - 4)}`;
+    }
+
+    function formatDate(isoString: string): string {
+        const date = new Date(isoString);
+        return date.toLocaleString();
+    }
+
+    async function loadConfigStatus() {
+        try {
+            const response = await fetch('/api/save-config');
+            const data = await response.json();
+
+            loading.classList.add('hidden');
+
+            if (!data.exists || !data.setupComplete) {
+                noConfig.classList.remove('hidden');
+                return;
+            }
+
+            const configResponse = await fetch('/api/get-config');
+            if (!configResponse.ok) {
+                noConfig.classList.remove('hidden');
+                return;
+            }
+
+            const config = await configResponse.json();
+            configDetails.classList.remove('hidden');
+
+            (document.getElementById('last-updated') as HTMLSpanElement).textContent = 
+                formatDate(config.lastUpdated || new Date().toISOString());
+            
+            (document.getElementById('api-key-masked') as HTMLSpanElement).textContent = 
+                maskApiKey(config.openaiKey);
+            
+            (document.getElementById('model') as HTMLSpanElement).textContent = config.openaiModel || 'N/A';
+            (document.getElementById('voice') as HTMLSpanElement).textContent = config.voice || 'alloy';
+            
+            (document.getElementById('fetch-url') as HTMLDivElement).textContent = config.fetchUrl || 'Not configured';
+            (document.getElementById('action-url') as HTMLDivElement).textContent = config.actionUrl || 'Not configured';
+            (document.getElementById('manage-url') as HTMLDivElement).textContent = config.manageUrl || 'Not configured';
+
+            const historyContainer = document.getElementById('config-history') as HTMLDivElement;
+            if (config.configHistory && config.configHistory.length > 0) {
+                historyContainer.innerHTML = '';
+                config.configHistory.reverse().forEach((entry: { timestamp: string, action: string }) => {
+                    const entryDiv = document.createElement('div');
+                    entryDiv.className = 'flex justify-between items-center py-2 border-b text-sm';
+                    entryDiv.innerHTML = `
+                        <span class="text-gray-600">${formatDate(entry.timestamp)}</span>
+                        <span class="px-2 py-1 rounded text-xs font-medium ${
+                            entry.action === 'created' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                        }">${entry.action}</span>
+                    `;
+                    historyContainer.appendChild(entryDiv);
+                });
+            } else {
+                historyContainer.innerHTML = '<p class="text-gray-500 text-sm">No history available</p>';
+            }
+
+        } catch (error) {
+            console.error('Failed to load config status:', error);
+            loading.classList.add('hidden');
+            noConfig.classList.remove('hidden');
+        }
+    }
+
+    loadConfigStatus();
+</script>

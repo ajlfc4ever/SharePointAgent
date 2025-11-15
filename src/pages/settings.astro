@@ -1,0 +1,492 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Advanced Settings - SharePoint Assistant">
+    <main class="mx-auto max-w-4xl px-4 py-8">
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold mb-2">Advanced Settings</h1>
+            <p class="text-gray-600">Customize AI behavior, model selection, function schemas, and advanced parameters</p>
+        </div>
+        
+        <div id="settings-status-banner" class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 hidden">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold text-blue-900">Settings Already Configured</h2>
+                    <p class="text-sm text-blue-700 mt-1">
+                        <span id="settings-status-text"></span>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div id="settings-container" class="space-y-6">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4">AI Instructions</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label for="instructions" class="block text-sm font-medium mb-2">System Instructions</label>
+                        <textarea 
+                            id="instructions" 
+                            rows="6"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                            placeholder="Enter custom instructions for the AI assistant..."
+                        ></textarea>
+                        <p class="mt-1 text-sm text-gray-500">Define how the AI assistant should behave and respond.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4">Model Parameters</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label for="temperature" class="block text-sm font-medium mb-2">Temperature: <span id="temp-value">0.8</span></label>
+                        <input 
+                            type="range" 
+                            id="temperature" 
+                            min="0" 
+                            max="2" 
+                            step="0.1" 
+                            value="0.8"
+                            class="w-full"
+                        />
+                        <p class="mt-1 text-sm text-gray-500">Controls randomness. Lower values are more focused, higher values are more creative.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4">Voice Activity Detection (VAD)</h2>
+                <div class="space-y-4">
+                    <div>
+                        <label for="vad-threshold" class="block text-sm font-medium mb-2">Threshold: <span id="vad-threshold-value">0.5</span></label>
+                        <input 
+                            type="range" 
+                            id="vad-threshold" 
+                            min="0" 
+                            max="1" 
+                            step="0.05" 
+                            value="0.5"
+                            class="w-full"
+                        />
+                        <p class="mt-1 text-sm text-gray-500">Activation threshold for voice detection (0-1).</p>
+                    </div>
+                    
+                    <div>
+                        <label for="prefix-padding" class="block text-sm font-medium mb-2">Prefix Padding: <span id="prefix-padding-value">300</span> ms</label>
+                        <input 
+                            type="range" 
+                            id="prefix-padding" 
+                            min="0" 
+                            max="1000" 
+                            step="50" 
+                            value="300"
+                            class="w-full"
+                        />
+                        <p class="mt-1 text-sm text-gray-500">How much audio before speech detection to include.</p>
+                    </div>
+                    
+                    <div>
+                        <label for="silence-duration" class="block text-sm font-medium mb-2">Silence Duration: <span id="silence-duration-value">500</span> ms</label>
+                        <input 
+                            type="range" 
+                            id="silence-duration" 
+                            min="100" 
+                            max="2000" 
+                            step="100" 
+                            value="500"
+                            class="w-full"
+                        />
+                        <p class="mt-1 text-sm text-gray-500">How long to wait before detecting end of speech.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4">Function Definitions</h2>
+                <p class="text-sm text-gray-600 mb-4">Define the input parameter schemas and descriptions for each Power Automate function. These tell the AI what parameters it can provide when calling your flows.</p>
+                
+                <div class="space-y-6">
+                    <div>
+                        <label for="fetch-description" class="block text-sm font-medium mb-2">
+                            Fetch SharePoint Data - Function Description
+                            <span class="text-gray-500 font-normal">(D1 Flow)</span>
+                        </label>
+                        <textarea 
+                            id="fetch-description" 
+                            rows="3"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            placeholder="Describe what this function does and when to use it..."
+                        ></textarea>
+                        <p class="mt-1 text-sm text-gray-500">Tell the AI what this function does and when to call it.</p>
+                        
+                        <label for="fetch-schema" class="block text-sm font-medium mb-2 mt-4">
+                            Fetch SharePoint Data - Input Parameters Schema
+                        </label>
+                        <textarea 
+                            id="fetch-schema" 
+                            rows="6"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                            placeholder='{"type": "object", "properties": {...}}'
+                        ></textarea>
+                        <p class="mt-1 text-sm text-gray-500">JSON schema defining input parameters the AI can send to this flow.</p>
+                    </div>
+                    
+                    <div>
+                        <label for="action-description" class="block text-sm font-medium mb-2">
+                            Perform SharePoint Action - Function Description
+                            <span class="text-gray-500 font-normal">(D2 Flow)</span>
+                        </label>
+                        <textarea 
+                            id="action-description" 
+                            rows="3"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            placeholder="Describe what this function does and when to use it..."
+                        ></textarea>
+                        <p class="mt-1 text-sm text-gray-500">Tell the AI what this function does and when to call it.</p>
+                        
+                        <label for="action-schema" class="block text-sm font-medium mb-2 mt-4">
+                            Perform SharePoint Action - Input Parameters Schema
+                        </label>
+                        <textarea 
+                            id="action-schema" 
+                            rows="6"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                            placeholder='{"type": "object", "properties": {...}}'
+                        ></textarea>
+                        <p class="mt-1 text-sm text-gray-500">JSON schema defining input parameters the AI can send to this flow.</p>
+                    </div>
+                    
+                    <div>
+                        <label for="manage-description" class="block text-sm font-medium mb-2">
+                            Manage SharePoint Item - Function Description
+                            <span class="text-gray-500 font-normal">(D3 Flow)</span>
+                        </label>
+                        <textarea 
+                            id="manage-description" 
+                            rows="3"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            placeholder="Describe what this function does and when to use it..."
+                        ></textarea>
+                        <p class="mt-1 text-sm text-gray-500">Tell the AI what this function does and when to call it.</p>
+                        
+                        <label for="manage-schema" class="block text-sm font-medium mb-2 mt-4">
+                            Manage SharePoint Item - Input Parameters Schema
+                        </label>
+                        <textarea 
+                            id="manage-schema" 
+                            rows="6"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                            placeholder='{"type": "object", "properties": {...}}'
+                        ></textarea>
+                        <p class="mt-1 text-sm text-gray-500">JSON schema defining input parameters the AI can send to this flow.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-4">Text Chat</h2>
+                <div class="space-y-4">
+                    <div class="flex items-center">
+                        <input 
+                            type="checkbox" 
+                            id="enable-text-chat" 
+                            class="mr-2 h-4 w-4"
+                        />
+                        <label for="enable-text-chat" class="text-sm font-medium">Enable Text Chat Interface</label>
+                    </div>
+                    <p class="text-sm text-gray-500">When enabled, adds a text input area to the assistant page for typing messages instead of using voice.</p>
+                    
+                    <div>
+                        <label for="text-chat-model" class="block text-sm font-medium mb-2">Text Chat Model</label>
+                        <select 
+                            id="text-chat-model" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            <option value="gpt-5.1">gpt-5.1 (Latest - Recommended)</option>
+                            <option value="gpt-5">gpt-5</option>
+                            <option value="gpt-4o">gpt-4o</option>
+                            <option value="gpt-4o-mini">gpt-4o-mini</option>
+                            <option value="gpt-4-turbo">gpt-4-turbo</option>
+                            <option value="gpt-4">gpt-4</option>
+                        </select>
+                        <p class="mt-1 text-sm text-gray-500">Select the OpenAI model to use for text chat. GPT-5.1 (Nov 2025) is 2-3x faster and more intelligent. Note: The Realtime API models are used for voice.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex gap-4">
+                <button 
+                    id="save-settings-btn" 
+                    class="px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    Save Settings
+                </button>
+                <button 
+                    id="reset-settings-btn" 
+                    class="px-6 py-3 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed hidden"
+                >
+                    Reset to Defaults
+                </button>
+            </div>
+
+            <div id="settings-status-message" class="p-4 rounded-md hidden"></div>
+        </div>
+
+        <div class="mt-6 text-center">
+            <a href="/assistant" class="text-blue-600 hover:text-blue-800 text-sm">Back to Assistant</a>
+        </div>
+    </main>
+</Layout>
+
+<script>
+    const saveSettingsBtn = document.getElementById('save-settings-btn') as HTMLButtonElement;
+    const resetSettingsBtn = document.getElementById('reset-settings-btn') as HTMLButtonElement;
+    const statusMessage = document.getElementById('settings-status-message') as HTMLDivElement;
+    const settingsStatusBanner = document.getElementById('settings-status-banner') as HTMLDivElement;
+    const settingsStatusText = document.getElementById('settings-status-text') as HTMLSpanElement;
+
+    const temperatureInput = document.getElementById('temperature') as HTMLInputElement;
+    const tempValue = document.getElementById('temp-value') as HTMLSpanElement;
+    
+    const vadThresholdInput = document.getElementById('vad-threshold') as HTMLInputElement;
+    const vadThresholdValue = document.getElementById('vad-threshold-value') as HTMLSpanElement;
+    
+    const prefixPaddingInput = document.getElementById('prefix-padding') as HTMLInputElement;
+    const prefixPaddingValue = document.getElementById('prefix-padding-value') as HTMLSpanElement;
+    
+    const silenceDurationInput = document.getElementById('silence-duration') as HTMLInputElement;
+    const silenceDurationValue = document.getElementById('silence-duration-value') as HTMLSpanElement;
+
+    temperatureInput.addEventListener('input', () => {
+        tempValue.textContent = temperatureInput.value;
+    });
+
+    vadThresholdInput.addEventListener('input', () => {
+        vadThresholdValue.textContent = vadThresholdInput.value;
+    });
+
+    prefixPaddingInput.addEventListener('input', () => {
+        prefixPaddingValue.textContent = prefixPaddingInput.value;
+    });
+
+    silenceDurationInput.addEventListener('input', () => {
+        silenceDurationValue.textContent = silenceDurationInput.value;
+    });
+
+    let hasExistingSettings = false;
+
+    async function loadExistingSettings() {
+        try {
+            const response = await fetch('/api/get-settings');
+            if (response.ok) {
+                const settings = await response.json();
+                if (settings.exists) {
+                    hasExistingSettings = true;
+                    resetSettingsBtn.classList.remove('hidden');
+                    
+                    if (settings.lastUpdated) {
+                        const lastUpdated = new Date(settings.lastUpdated);
+                        settingsStatusText.textContent = `Last updated: ${lastUpdated.toLocaleString()}`;
+                        settingsStatusBanner.classList.remove('hidden');
+                    }
+                    
+                    if (settings.instructions) {
+                        (document.getElementById('instructions') as HTMLTextAreaElement).value = settings.instructions;
+                    }
+                    if (settings.temperature !== undefined) {
+                        temperatureInput.value = settings.temperature.toString();
+                        tempValue.textContent = settings.temperature.toString();
+                    }
+                    if (settings.vadThreshold !== undefined) {
+                        vadThresholdInput.value = settings.vadThreshold.toString();
+                        vadThresholdValue.textContent = settings.vadThreshold.toString();
+                    }
+                    if (settings.prefixPadding !== undefined) {
+                        prefixPaddingInput.value = settings.prefixPadding.toString();
+                        prefixPaddingValue.textContent = settings.prefixPadding.toString();
+                    }
+                    if (settings.silenceDuration !== undefined) {
+                        silenceDurationInput.value = settings.silenceDuration.toString();
+                        silenceDurationValue.textContent = settings.silenceDuration.toString();
+                    }
+                    if (settings.fetchDescription) {
+                        (document.getElementById('fetch-description') as HTMLTextAreaElement).value = settings.fetchDescription;
+                    }
+                    if (settings.fetchSchema) {
+                        (document.getElementById('fetch-schema') as HTMLTextAreaElement).value = 
+                            typeof settings.fetchSchema === 'string' ? settings.fetchSchema : JSON.stringify(settings.fetchSchema, null, 2);
+                    }
+                    if (settings.actionDescription) {
+                        (document.getElementById('action-description') as HTMLTextAreaElement).value = settings.actionDescription;
+                    }
+                    if (settings.actionSchema) {
+                        (document.getElementById('action-schema') as HTMLTextAreaElement).value = 
+                            typeof settings.actionSchema === 'string' ? settings.actionSchema : JSON.stringify(settings.actionSchema, null, 2);
+                    }
+                    if (settings.manageDescription) {
+                        (document.getElementById('manage-description') as HTMLTextAreaElement).value = settings.manageDescription;
+                    }
+                    if (settings.manageSchema) {
+                        (document.getElementById('manage-schema') as HTMLTextAreaElement).value = 
+                            typeof settings.manageSchema === 'string' ? settings.manageSchema : JSON.stringify(settings.manageSchema, null, 2);
+                    }
+                    if (settings.enableTextChat !== undefined) {
+                        (document.getElementById('enable-text-chat') as HTMLInputElement).checked = settings.enableTextChat;
+                    }
+                    if (settings.textChatModel) {
+                        (document.getElementById('text-chat-model') as HTMLSelectElement).value = settings.textChatModel;
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load existing settings:', error);
+        }
+    }
+
+    loadExistingSettings();
+
+    function showStatus(message: string, type: 'success' | 'error' | 'info') {
+        statusMessage.textContent = message;
+        statusMessage.className = `p-4 rounded-md ${
+            type === 'success' ? 'bg-green-100 text-green-800' :
+            type === 'error' ? 'bg-red-100 text-red-800' :
+            'bg-blue-100 text-blue-800'
+        }`;
+        statusMessage.classList.remove('hidden');
+    }
+
+    saveSettingsBtn.addEventListener('click', async () => {
+        const instructions = (document.getElementById('instructions') as HTMLTextAreaElement).value;
+        const temperature = parseFloat(temperatureInput.value);
+        const vadThreshold = parseFloat(vadThresholdInput.value);
+        const prefixPadding = parseInt(prefixPaddingInput.value);
+        const silenceDuration = parseInt(silenceDurationInput.value);
+        const fetchDescription = (document.getElementById('fetch-description') as HTMLTextAreaElement).value;
+        const fetchSchema = (document.getElementById('fetch-schema') as HTMLTextAreaElement).value;
+        const actionDescription = (document.getElementById('action-description') as HTMLTextAreaElement).value;
+        const actionSchema = (document.getElementById('action-schema') as HTMLTextAreaElement).value;
+        const manageDescription = (document.getElementById('manage-description') as HTMLTextAreaElement).value;
+        const manageSchema = (document.getElementById('manage-schema') as HTMLTextAreaElement).value;
+        const enableTextChat = (document.getElementById('enable-text-chat') as HTMLInputElement).checked;
+        const textChatModel = (document.getElementById('text-chat-model') as HTMLSelectElement).value;
+
+        let fetchSchemaObj = null;
+        let actionSchemaObj = null;
+        let manageSchemaObj = null;
+
+        if (fetchSchema.trim()) {
+            try {
+                fetchSchemaObj = JSON.parse(fetchSchema);
+            } catch (e) {
+                showStatus('Invalid JSON in Fetch Schema', 'error');
+                return;
+            }
+        }
+
+        if (actionSchema.trim()) {
+            try {
+                actionSchemaObj = JSON.parse(actionSchema);
+            } catch (e) {
+                showStatus('Invalid JSON in Action Schema', 'error');
+                return;
+            }
+        }
+
+        if (manageSchema.trim()) {
+            try {
+                manageSchemaObj = JSON.parse(manageSchema);
+            } catch (e) {
+                showStatus('Invalid JSON in Manage Schema', 'error');
+                return;
+            }
+        }
+
+        saveSettingsBtn.disabled = true;
+        saveSettingsBtn.textContent = 'Saving...';
+
+        try {
+            const response = await fetch('/api/save-settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    instructions,
+                    temperature,
+                    vadThreshold,
+                    prefixPadding,
+                    silenceDuration,
+                    fetchDescription,
+                    fetchSchema: fetchSchemaObj,
+                    actionDescription,
+                    actionSchema: actionSchemaObj,
+                    manageDescription,
+                    manageSchema: manageSchemaObj,
+                    enableTextChat,
+                    textChatModel
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to save settings');
+            }
+
+            const result = await response.json();
+
+            if (result.success) {
+                showStatus('Settings saved successfully!', 'success');
+                hasExistingSettings = true;
+                resetSettingsBtn.classList.remove('hidden');
+                setTimeout(() => {
+                    statusMessage.classList.add('hidden');
+                }, 3000);
+            } else {
+                showStatus(`Failed to save: ${result.message}`, 'error');
+            }
+        } catch (error) {
+            console.error('Save settings error:', error);
+            showStatus(`Save Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+        } finally {
+            saveSettingsBtn.disabled = false;
+            saveSettingsBtn.textContent = 'Save Settings';
+        }
+    });
+
+    resetSettingsBtn.addEventListener('click', async () => {
+        const confirmed = confirm('Are you sure you want to reset to default settings? This action cannot be undone.');
+        if (!confirmed) {
+            return;
+        }
+
+        resetSettingsBtn.disabled = true;
+        resetSettingsBtn.textContent = 'Resetting...';
+
+        try {
+            const response = await fetch('/api/reset-settings', {
+                method: 'POST'
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to reset settings');
+            }
+
+            const result = await response.json();
+
+            if (result.success) {
+                showStatus('Settings reset successfully! Reloading...', 'success');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            } else {
+                showStatus(`Failed to reset: ${result.message}`, 'error');
+                resetSettingsBtn.disabled = false;
+                resetSettingsBtn.textContent = 'Reset to Defaults';
+            }
+        } catch (error) {
+            console.error('Reset settings error:', error);
+            showStatus(`Reset Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+            resetSettingsBtn.disabled = false;
+            resetSettingsBtn.textContent = 'Reset to Defaults';
+        }
+    });
+</script>

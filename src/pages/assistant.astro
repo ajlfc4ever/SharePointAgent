@@ -1,0 +1,831 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="SharePoint Assistant">
+    <main class="mx-auto max-w-4xl px-4 py-8 h-screen flex flex-col">
+
+        <div id="chat-container" class="flex-1 bg-white rounded-lg shadow overflow-hidden flex flex-col">
+            <div id="messages" class="flex-1 overflow-y-auto p-6 space-y-4" role="log" aria-live="polite" aria-atomic="false">
+                <div class="text-center text-gray-500 py-8">
+                    <p>Use voice or type to interact with the assistant.</p>
+                </div>
+            </div>
+            <div id="status-announcer" class="sr-only" role="status" aria-live="assertive" aria-atomic="true"></div>
+
+            <div class="border-t p-4 bg-gray-50">
+                <div id="text-chat-area" class="mb-4">
+                    <div class="flex gap-2">
+                        <input 
+                            type="text" 
+                            id="text-input" 
+                            placeholder="Type your message..." 
+                            class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <button
+                            id="send-text-button"
+                            class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Send
+                        </button>
+                    </div>
+                </div>
+                <div class="flex flex-col gap-3">
+                    <div class="flex gap-3 items-center justify-center">
+                        <button
+                            id="connect-button"
+                            class="px-8 py-4 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+                        >
+                            Start Voice Session
+                        </button>
+                        <button
+                            id="disconnect-button"
+                            class="px-8 py-4 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed font-semibold hidden"
+                        >
+                            End Session
+                        </button>
+                    </div>
+                    <div id="status" class="text-center text-sm text-gray-600">
+                        Not connected
+                    </div>
+                    <div id="audio-indicator" class="h-2 bg-gray-200 rounded hidden">
+                        <div id="audio-level" class="h-full bg-blue-500 rounded transition-all duration-100" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-4 text-center">
+            <a href="/" class="text-blue-600 hover:text-blue-800 text-sm">Return Home</a>
+        </div>
+    </main>
+</Layout>
+
+<script>
+    const messagesContainer = document.getElementById('messages') as HTMLDivElement;
+    const connectButton = document.getElementById('connect-button') as HTMLButtonElement;
+    const disconnectButton = document.getElementById('disconnect-button') as HTMLButtonElement;
+    const statusElement = document.getElementById('status') as HTMLDivElement;
+    const audioIndicator = document.getElementById('audio-indicator') as HTMLDivElement;
+    const audioLevel = document.getElementById('audio-level') as HTMLDivElement;
+    const textChatArea = document.getElementById('text-chat-area') as HTMLDivElement;
+    const textInput = document.getElementById('text-input') as HTMLInputElement;
+    const sendTextButton = document.getElementById('send-text-button') as HTMLButtonElement;
+    const statusAnnouncer = document.getElementById('status-announcer') as HTMLDivElement;
+
+    let isFirstMessage = true;
+    let ws: WebSocket | null = null;
+    let audioContext: AudioContext | null = null;
+    let mediaStream: MediaStream | null = null;
+    let audioWorklet: AudioWorkletNode | null = null;
+    let sessionTranscript: Array<{role: string, content: string}> = [];
+    let userSettings: any = {};
+    let nextAudioStartTime = 0;
+
+    async function loadSettings() {
+        try {
+            const response = await fetch('/api/get-settings');
+            if (response.ok) {
+                const settings = await response.json();
+                if (settings.exists) {
+                    userSettings = settings;
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load settings:', error);
+        }
+    }
+
+    function announceStatus(message: string) {
+        statusAnnouncer.textContent = message;
+    }
+
+    async function checkConfig() {
+        try {
+            const response = await fetch('/api/save-config');
+            const data = await response.json();
+            
+            if (!data.exists || !data.setupComplete) {
+                window.location.href = '/setup';
+            }
+        } catch (error) {
+            console.error('Failed to check configuration:', error);
+        }
+    }
+
+    loadSettings();
+    checkConfig();
+
+    function addMessage(content: string, role: 'user' | 'assistant' | 'system', skipSystemDisplay: boolean = false) {
+        if (skipSystemDisplay && role === 'system') {
+            return;
+        }
+
+        if (isFirstMessage && role !== 'user') {
+            messagesContainer.innerHTML = '';
+            isFirstMessage = false;
+        }
+
+        const messageDiv = document.createElement('div');
+        const isUser = role === 'user';
+        const isSystem = role === 'system';
+        
+        messageDiv.className = `flex flex-col gap-1 ${isUser ? 'items-end' : isSystem ? 'items-center' : 'items-start'}`;
+        
+        if (!isSystem) {
+            const headingDiv = document.createElement('h2');
+            headingDiv.className = 'text-sm font-semibold text-gray-700 px-2';
+            headingDiv.textContent = isUser ? 'You said:' : 'Agent said:';
+            messageDiv.appendChild(headingDiv);
+        }
+        
+        const bubbleDiv = document.createElement('div');
+        bubbleDiv.className = `max-w-3xl px-4 py-3 rounded-lg ${
+            isUser 
+                ? 'bg-blue-600 text-white' 
+                : isSystem
+                ? 'bg-yellow-100 text-yellow-900 text-sm'
+                : 'bg-gray-100 text-gray-900'
+        }`;
+        
+        const textP = document.createElement('p');
+        textP.className = 'whitespace-pre-wrap';
+        textP.textContent = content;
+        
+        bubbleDiv.appendChild(textP);
+        messageDiv.appendChild(bubbleDiv);
+        messagesContainer.appendChild(messageDiv);
+        
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    function updateStatus(status: string, announce: boolean = false) {
+        statusElement.textContent = status;
+        if (announce) {
+            announceStatus(status);
+        }
+    }
+
+    async function startVoiceSession() {
+        try {
+            updateStatus('Getting credentials...', true);
+            
+            const tokenResponse = await fetch('/api/realtime-token', {
+                method: 'POST'
+            });
+
+            if (!tokenResponse.ok) {
+                const contentType = tokenResponse.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const errorData = await tokenResponse.json();
+                    throw new Error(`Token API error (${tokenResponse.status}): ${errorData.message || errorData.error || 'Unknown error'}`);
+                } else {
+                    const text = await tokenResponse.text();
+                    throw new Error(`Token API error (${tokenResponse.status}): Expected JSON but got ${contentType}. Response: ${text.substring(0, 200)}`);
+                }
+            }
+
+            const contentType = tokenResponse.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await tokenResponse.text();
+                throw new Error(`Token API returned non-JSON response. Content-Type: ${contentType}. Response: ${text.substring(0, 200)}`);
+            }
+
+            const { apiKey, model, voice, config: powerAutomateConfig } = await tokenResponse.json();
+
+            updateStatus('Requesting microphone access...', true);
+            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+            updateStatus('Connecting to OpenAI Realtime API...', true);
+            
+            const url = `wss://api.openai.com/v1/realtime?model=${model || 'gpt-4o-realtime-preview-2024-10-01'}`;
+            ws = new WebSocket(url, [
+                'realtime',
+                `openai-insecure-api-key.${apiKey}`,
+                'openai-beta.realtime-v1'
+            ]);
+
+            ws.addEventListener('open', async () => {
+                updateStatus('Connected! Speak now...', true);
+                addMessage('Voice session started. You can speak now!', 'system', true);
+                connectButton.classList.add('hidden');
+                disconnectButton.classList.remove('hidden');
+                audioIndicator.classList.remove('hidden');
+
+                audioContext = new AudioContext({ sampleRate: 24000 });
+                
+                const source = audioContext.createMediaStreamSource(mediaStream!);
+                await audioContext.audioWorklet.addModule(
+                    'data:text/javascript,' + encodeURIComponent(`
+                        class AudioProcessor extends AudioWorkletProcessor {
+                            process(inputs, outputs, parameters) {
+                                const input = inputs[0];
+                                if (input && input[0]) {
+                                    const pcm16 = new Int16Array(input[0].length);
+                                    for (let i = 0; i < input[0].length; i++) {
+                                        pcm16[i] = Math.max(-32768, Math.min(32767, input[0][i] * 32768));
+                                    }
+                                    this.port.postMessage(pcm16.buffer);
+                                }
+                                return true;
+                            }
+                        }
+                        registerProcessor('audio-processor', AudioProcessor);
+                    `)
+                );
+
+                audioWorklet = new AudioWorkletNode(audioContext, 'audio-processor');
+                source.connect(audioWorklet);
+
+                audioWorklet.port.onmessage = (event) => {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        const base64Audio = btoa(String.fromCharCode(...new Uint8Array(event.data)));
+                        ws.send(JSON.stringify({
+                            type: 'input_audio_buffer.append',
+                            audio: base64Audio
+                        }));
+                    }
+                };
+
+                const defaultTools = [];
+                
+                if (userSettings.fetchDescription && userSettings.fetchSchema) {
+                    defaultTools.push({
+                        type: 'function',
+                        name: 'fetchSharePointData',
+                        description: userSettings.fetchDescription,
+                        parameters: userSettings.fetchSchema
+                    });
+                }
+                
+                if (userSettings.actionDescription && userSettings.actionSchema) {
+                    defaultTools.push({
+                        type: 'function',
+                        name: 'performSharePointAction',
+                        description: userSettings.actionDescription,
+                        parameters: userSettings.actionSchema
+                    });
+                }
+                
+                if (userSettings.manageDescription && userSettings.manageSchema) {
+                    defaultTools.push({
+                        type: 'function',
+                        name: 'manageSharePointItem',
+                        description: userSettings.manageDescription,
+                        parameters: userSettings.manageSchema
+                    });
+                }
+
+                const sessionConfig: any = {
+                    type: 'session.update',
+                    session: {
+                        modalities: ['text', 'audio'],
+                        instructions: userSettings.instructions || 'You are a helpful assistant.',
+                        voice: voice || 'alloy',
+                        input_audio_format: 'pcm16',
+                        output_audio_format: 'pcm16',
+                        input_audio_transcription: {
+                            model: 'whisper-1'
+                        },
+                        turn_detection: {
+                            type: 'server_vad',
+                            threshold: userSettings.vadThreshold !== undefined ? userSettings.vadThreshold : 0.5,
+                            prefix_padding_ms: userSettings.prefixPadding !== undefined ? userSettings.prefixPadding : 300,
+                            silence_duration_ms: userSettings.silenceDuration !== undefined ? userSettings.silenceDuration : 500
+                        },
+                        temperature: userSettings.temperature !== undefined ? userSettings.temperature : 0.8
+                    }
+                };
+                
+                if (defaultTools.length > 0) {
+                    sessionConfig.session.tools = defaultTools;
+                    sessionConfig.session.tool_choice = 'auto';
+                }
+                
+                ws!.send(JSON.stringify(sessionConfig));
+            });
+
+            ws.addEventListener('message', async (event) => {
+                const data = JSON.parse(event.data);
+                
+                switch (data.type) {
+                    case 'conversation.item.input_audio_transcription.completed':
+                        if (data.transcript) {
+                            addMessage(data.transcript, 'user');
+                            sessionTranscript.push({role: 'user', content: data.transcript});
+                        }
+                        break;
+                    
+                    case 'response.audio_transcript.delta':
+                        break;
+                    
+                    case 'response.audio_transcript.done':
+                        if (data.transcript) {
+                            addMessage(data.transcript, 'assistant');
+                            sessionTranscript.push({role: 'assistant', content: data.transcript});
+                        }
+                        break;
+                    
+                    case 'response.audio.delta':
+                        if (data.delta && audioContext) {
+                            const audioData = atob(data.delta);
+                            const int16Array = new Int16Array(audioData.length / 2);
+                            for (let i = 0; i < int16Array.length; i++) {
+                                int16Array[i] = (audioData.charCodeAt(i * 2 + 1) << 8) | audioData.charCodeAt(i * 2);
+                            }
+                            const float32Array = new Float32Array(int16Array.length);
+                            for (let i = 0; i < int16Array.length; i++) {
+                                float32Array[i] = int16Array[i] / 32768.0;
+                            }
+                            const audioBuffer = audioContext.createBuffer(1, float32Array.length, 24000);
+                            audioBuffer.getChannelData(0).set(float32Array);
+                            const source = audioContext.createBufferSource();
+                            source.buffer = audioBuffer;
+                            source.connect(audioContext.destination);
+                            
+                            const currentTime = audioContext.currentTime;
+                            const startTime = Math.max(currentTime, nextAudioStartTime);
+                            source.start(startTime);
+                            nextAudioStartTime = startTime + audioBuffer.duration;
+                        }
+                        break;
+
+                    case 'response.function_call_arguments.done':
+                        if (data.name) {
+                            announceStatus(`Sending query to ${data.name}`);
+                            const args = JSON.parse(data.arguments);
+                            
+                            try {
+                                let result;
+                                if (data.name === 'fetchSharePointData') {
+                                    announceStatus('Fetching data from SharePoint');
+                                    console.log('Calling Fetch Flow:', powerAutomateConfig.fetchUrl);
+                                    const response = await fetch(powerAutomateConfig.fetchUrl, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ query: args.query || '' })
+                                    });
+                                    
+                                    console.log('Fetch Flow response status:', response.status);
+                                    const contentType = response.headers.get('content-type');
+                                    console.log('Fetch Flow content-type:', contentType);
+                                    
+                                    if (!response.ok) {
+                                        const text = await response.text();
+                                        console.error('Fetch Flow error response:', text.substring(0, 500));
+                                        throw new Error(`Fetch Flow (${powerAutomateConfig.fetchUrl}) returned status ${response.status}. Response: ${text.substring(0, 200)}`);
+                                    }
+                                    
+                                    if (!contentType || !contentType.includes('application/json')) {
+                                        const text = await response.text();
+                                        console.error('Fetch Flow non-JSON response:', text.substring(0, 500));
+                                        throw new Error(`Fetch Flow (${powerAutomateConfig.fetchUrl}): Expected JSON but got ${contentType}. Response: ${text.substring(0, 200)}`);
+                                    }
+                                    
+                                    const responseText = await response.text();
+                                    console.log('Fetch Flow raw response:', responseText.substring(0, 500));
+                                    
+                                    if (!responseText || responseText.trim() === '') {
+                                        throw new Error(`Fetch Flow (${powerAutomateConfig.fetchUrl}): Returned empty response`);
+                                    }
+                                    
+                                    try {
+                                        result = JSON.parse(responseText);
+                                        console.log('Fetch Flow parsed successfully');
+                                    } catch (jsonError) {
+                                        console.error('Fetch Flow JSON parse error:', jsonError);
+                                        throw new Error(`Fetch Flow (${powerAutomateConfig.fetchUrl}): Invalid JSON - ${jsonError instanceof Error ? jsonError.message : 'Unknown error'}. Response: ${responseText.substring(0, 200)}`);
+                                    }
+                                } else if (data.name === 'performSharePointAction') {
+                                    announceStatus('Performing action in SharePoint');
+                                    console.log('Calling Action Flow:', powerAutomateConfig.actionUrl);
+                                    const response = await fetch(powerAutomateConfig.actionUrl, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify(args)
+                                    });
+                                    
+                                    console.log('Action Flow response status:', response.status);
+                                    const contentType = response.headers.get('content-type');
+                                    console.log('Action Flow content-type:', contentType);
+                                    
+                                    if (!response.ok) {
+                                        const text = await response.text();
+                                        console.error('Action Flow error response:', text.substring(0, 500));
+                                        throw new Error(`Action Flow (${powerAutomateConfig.actionUrl}) returned status ${response.status}. Response: ${text.substring(0, 200)}`);
+                                    }
+                                    
+                                    if (!contentType || !contentType.includes('application/json')) {
+                                        const text = await response.text();
+                                        console.error('Action Flow non-JSON response:', text.substring(0, 500));
+                                        throw new Error(`Action Flow (${powerAutomateConfig.actionUrl}): Expected JSON but got ${contentType}. Response: ${text.substring(0, 200)}`);
+                                    }
+                                    
+                                    const responseText = await response.text();
+                                    console.log('Action Flow raw response:', responseText.substring(0, 500));
+                                    
+                                    if (!responseText || responseText.trim() === '') {
+                                        throw new Error(`Action Flow (${powerAutomateConfig.actionUrl}): Returned empty response`);
+                                    }
+                                    
+                                    try {
+                                        result = JSON.parse(responseText);
+                                        console.log('Action Flow parsed successfully');
+                                    } catch (jsonError) {
+                                        console.error('Action Flow JSON parse error:', jsonError);
+                                        throw new Error(`Action Flow (${powerAutomateConfig.actionUrl}): Invalid JSON - ${jsonError instanceof Error ? jsonError.message : 'Unknown error'}. Response: ${responseText.substring(0, 200)}`);
+                                    }
+                                } else if (data.name === 'manageSharePointItem') {
+                                    announceStatus('Managing SharePoint item');
+                                    console.log('Calling Manage Flow:', powerAutomateConfig.manageUrl);
+                                    const response = await fetch(powerAutomateConfig.manageUrl, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify(args)
+                                    });
+                                    
+                                    console.log('Manage Flow response status:', response.status);
+                                    const contentType = response.headers.get('content-type');
+                                    console.log('Manage Flow content-type:', contentType);
+                                    
+                                    if (!response.ok) {
+                                        const text = await response.text();
+                                        console.error('Manage Flow error response:', text.substring(0, 500));
+                                        throw new Error(`Manage Flow (${powerAutomateConfig.manageUrl}) returned status ${response.status}. Response: ${text.substring(0, 200)}`);
+                                    }
+                                    
+                                    if (!contentType || !contentType.includes('application/json')) {
+                                        const text = await response.text();
+                                        console.error('Manage Flow non-JSON response:', text.substring(0, 500));
+                                        throw new Error(`Manage Flow (${powerAutomateConfig.manageUrl}): Expected JSON but got ${contentType}. Response: ${text.substring(0, 200)}`);
+                                    }
+                                    
+                                    const responseText = await response.text();
+                                    console.log('Manage Flow raw response:', responseText.substring(0, 500));
+                                    
+                                    if (!responseText || responseText.trim() === '') {
+                                        throw new Error(`Manage Flow (${powerAutomateConfig.manageUrl}): Returned empty response`);
+                                    }
+                                    
+                                    try {
+                                        result = JSON.parse(responseText);
+                                        console.log('Manage Flow parsed successfully');
+                                    } catch (jsonError) {
+                                        console.error('Manage Flow JSON parse error:', jsonError);
+                                        throw new Error(`Manage Flow (${powerAutomateConfig.manageUrl}): Invalid JSON - ${jsonError instanceof Error ? jsonError.message : 'Unknown error'}. Response: ${responseText.substring(0, 200)}`);
+                                    }
+                                }
+
+                                announceStatus('Processing response');
+                                ws!.send(JSON.stringify({
+                                    type: 'conversation.item.create',
+                                    item: {
+                                        type: 'function_call_output',
+                                        call_id: data.call_id,
+                                        output: JSON.stringify(result)
+                                    }
+                                }));
+                                
+                                ws!.send(JSON.stringify({
+                                    type: 'response.create'
+                                }));
+                            } catch (error) {
+                                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                                console.error('Function call error:', error);
+                                announceStatus(`Error: ${errorMessage}`);
+                                ws!.send(JSON.stringify({
+                                    type: 'conversation.item.create',
+                                    item: {
+                                        type: 'function_call_output',
+                                        call_id: data.call_id,
+                                        output: JSON.stringify({ error: errorMessage })
+                                    }
+                                }));
+                                
+                                ws!.send(JSON.stringify({
+                                    type: 'response.create'
+                                }));
+                            }
+                        }
+                        break;
+
+                    case 'error':
+                        console.error('Realtime API error:', data);
+                        addMessage(`Error: ${data.error?.message || 'Unknown error'}`, 'system');
+                        break;
+                }
+            });
+
+            ws.addEventListener('error', (error) => {
+                console.error('WebSocket error:', error);
+                updateStatus('Connection error');
+                addMessage('Connection error occurred', 'system');
+                endVoiceSession();
+            });
+
+            ws.addEventListener('close', () => {
+                updateStatus('Disconnected');
+                endVoiceSession();
+            });
+
+        } catch (error) {
+            console.error('Failed to start voice session:', error);
+            updateStatus('Failed to start');
+            addMessage(`Error: ${error instanceof Error ? error.message : 'Failed to start voice session'}`, 'system');
+            endVoiceSession();
+        }
+    }
+
+    function endVoiceSession() {
+        if (ws) {
+            ws.close();
+            ws = null;
+        }
+        
+        if (audioWorklet) {
+            audioWorklet.disconnect();
+            audioWorklet = null;
+        }
+        
+        if (audioContext) {
+            audioContext.close();
+            audioContext = null;
+        }
+        
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(track => track.stop());
+            mediaStream = null;
+        }
+        
+        nextAudioStartTime = 0;
+
+        connectButton.classList.remove('hidden');
+        disconnectButton.classList.add('hidden');
+        audioIndicator.classList.add('hidden');
+        updateStatus('Not connected');
+        
+        if (sessionTranscript.length > 0) {
+            sessionStorage.setItem('voiceTranscript', JSON.stringify(sessionTranscript));
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'flex justify-center';
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = 'max-w-3xl px-4 py-3 rounded-lg bg-green-100 text-green-900 text-sm';
+            
+            const textP = document.createElement('p');
+            textP.innerHTML = 'Voice session ended. <a href="/transcript" class="underline font-semibold">View transcript</a>';
+            
+            bubbleDiv.appendChild(textP);
+            messageDiv.appendChild(bubbleDiv);
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            sessionTranscript = [];
+        } else {
+            addMessage('Voice session ended', 'system');
+        }
+    }
+
+    connectButton.addEventListener('click', startVoiceSession);
+    disconnectButton.addEventListener('click', endVoiceSession);
+
+    async function sendTextMessage() {
+        const message = textInput.value.trim();
+        if (!message) return;
+
+        addMessage(message, 'user');
+        textInput.value = '';
+        sendTextButton.disabled = true;
+        announceStatus('Sending query');
+
+        try {
+            const tokenResponse = await fetch('/api/realtime-token', {
+                method: 'POST'
+            });
+
+            if (!tokenResponse.ok) {
+                throw new Error('Failed to get configuration');
+            }
+
+            const { apiKey, model, config: powerAutomateConfig } = await tokenResponse.json();
+
+            const textChatTools = [];
+            
+            if (userSettings.fetchDescription && userSettings.fetchSchema) {
+                textChatTools.push({
+                    type: 'function',
+                    function: {
+                        name: 'fetchSharePointData',
+                        description: userSettings.fetchDescription,
+                        parameters: userSettings.fetchSchema
+                    }
+                });
+            }
+            
+            if (userSettings.actionDescription && userSettings.actionSchema) {
+                textChatTools.push({
+                    type: 'function',
+                    function: {
+                        name: 'performSharePointAction',
+                        description: userSettings.actionDescription,
+                        parameters: userSettings.actionSchema
+                    }
+                });
+            }
+            
+            if (userSettings.manageDescription && userSettings.manageSchema) {
+                textChatTools.push({
+                    type: 'function',
+                    function: {
+                        name: 'manageSharePointItem',
+                        description: userSettings.manageDescription,
+                        parameters: userSettings.manageSchema
+                    }
+                });
+            }
+
+            const chatPayload: any = {
+                model: userSettings.textChatModel || 'gpt-4o',
+                messages: [
+                    {
+                        role: 'system',
+                        content: userSettings.instructions || 'You are a helpful assistant.'
+                    },
+                    { role: 'user', content: message }
+                ],
+                temperature: userSettings.temperature !== undefined ? userSettings.temperature : 0.8
+            };
+            
+            if (textChatTools.length > 0) {
+                chatPayload.tools = textChatTools;
+                chatPayload.tool_choice = 'auto';
+            }
+            
+            const chatResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify(chatPayload)
+            });
+
+            if (!chatResponse.ok) {
+                throw new Error('Failed to get response from AI');
+            }
+
+            const data = await chatResponse.json();
+            const assistantMessage = data.choices[0].message;
+
+            if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+                const toolMessages = [];
+                
+                for (const toolCall of assistantMessage.tool_calls) {
+                    announceStatus(`Fetching data from ${toolCall.function.name}`);
+                    const args = JSON.parse(toolCall.function.arguments);
+                    
+                    try {
+                        let result;
+                        if (toolCall.function.name === 'fetchSharePointData') {
+                            announceStatus('Fetching SharePoint data');
+                            const response = await fetch(powerAutomateConfig.fetchUrl, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ query: args.query || '' })
+                            });
+                            
+                            if (!response.ok) {
+                                throw new Error(`Fetch Flow error: ${response.status}`);
+                            }
+                            
+                            result = await response.json();
+                            announceStatus('Processing results');
+                        } else if (toolCall.function.name === 'performSharePointAction') {
+                            announceStatus('Performing SharePoint action');
+                            const response = await fetch(powerAutomateConfig.actionUrl, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(args)
+                            });
+                            
+                            if (!response.ok) {
+                                throw new Error(`Action Flow error: ${response.status}`);
+                            }
+                            
+                            result = await response.json();
+                            announceStatus('Processing results');
+                        } else if (toolCall.function.name === 'manageSharePointItem') {
+                            announceStatus('Managing SharePoint item');
+                            const response = await fetch(powerAutomateConfig.manageUrl, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(args)
+                            });
+                            
+                            if (!response.ok) {
+                                throw new Error(`Manage Flow error: ${response.status}`);
+                            }
+                            
+                            result = await response.json();
+                            announceStatus('Processing results');
+                        }
+                        
+                        toolMessages.push({
+                            role: 'tool' as const,
+                            tool_call_id: toolCall.id,
+                            content: JSON.stringify(result)
+                        });
+                    } catch (error) {
+                        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                        announceStatus(`Error: ${errorMessage}`);
+                        
+                        toolMessages.push({
+                            role: 'tool' as const,
+                            tool_call_id: toolCall.id,
+                            content: JSON.stringify({ error: errorMessage })
+                        });
+                    }
+                }
+                
+                const followUpPayload: any = {
+                    model: userSettings.textChatModel || 'gpt-4o',
+                    messages: [
+                        {
+                            role: 'system',
+                            content: userSettings.instructions || 'You are a helpful assistant.'
+                        },
+                        { role: 'user', content: message },
+                        assistantMessage,
+                        ...toolMessages
+                    ],
+                    temperature: userSettings.temperature !== undefined ? userSettings.temperature : 0.8
+                };
+                
+                if (textChatTools.length > 0) {
+                    followUpPayload.tools = textChatTools;
+                    followUpPayload.tool_choice = 'auto';
+                }
+                
+                const followUpResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify(followUpPayload)
+                });
+
+                if (!followUpResponse.ok) {
+                    throw new Error('Failed to get follow-up response from AI');
+                }
+
+                const followUpData = await followUpResponse.json();
+                const finalMessage = followUpData.choices[0].message;
+                
+                if (finalMessage.content) {
+                    announceStatus('Read response');
+                    addMessage(finalMessage.content, 'assistant');
+                }
+            } else if (assistantMessage.content) {
+                announceStatus('Read response');
+                addMessage(assistantMessage.content, 'assistant');
+            }
+
+        } catch (error) {
+            console.error('Text chat error:', error);
+            addMessage(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'system');
+        } finally {
+            sendTextButton.disabled = false;
+        }
+    }
+
+    sendTextButton.addEventListener('click', sendTextMessage);
+    textInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            sendTextMessage();
+        }
+    });
+</script>
+
+<style>
+    @keyframes pulse {
+        0%, 100% {
+            opacity: 1;
+        }
+        50% {
+            opacity: 0.5;
+        }
+    }
+    
+    .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border-width: 0;
+    }
+</style>
