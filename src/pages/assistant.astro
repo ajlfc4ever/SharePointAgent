@@ -92,16 +92,22 @@ import Layout from '../layouts/Layout.astro';
     let textChatHistory: Array<{role: string, content: string}> = [];
     let settingsLoaded = false;
     let settingsLoadPromise: Promise<void>;
+    let isUserSpeaking = false;
+    let isAssistantSpeaking = false;
+    let activeAudioSources: AudioBufferSourceNode[] = [];
 
     async function serverLog(level: string, message: string, data?: any) {
         try {
-            await fetch('/api/log', {
+            const response = await fetch('/api/log', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ level, message, data })
             });
+            if (!response.ok) {
+                console.error('Failed to send log to server:', response.status, response.statusText);
+            }
         } catch (error) {
-            // Silently fail if logging fails
+            console.error('Failed to send log to server:', error);
         }
     }
 
@@ -231,7 +237,8 @@ import Layout from '../layouts/Layout.astro';
             await serverLog('info', 'Voice session - Configuration loaded', {
                 model: model,
                 voice: voice,
-                hasApiKey: !!apiKey
+                hasApiKey: !!apiKey,
+                voiceSource: 'from realtime-token API'
             });
 
             updateStatus('Requesting microphone access...', true);
@@ -299,33 +306,27 @@ import Layout from '../layouts/Layout.astro';
                     hasManageSchema: !!userSettings.manageSchema
                 });
                 
-                const defaultFetchSchema = {
-                    type: 'object',
-                    properties: {
-                        query: {
-                            type: 'string',
-                            description: "Optional natural-language description or OData-style filter for which records you want. For example: 'conversations awaiting response', 'software installed awaiting hours', or an OData expression like substringof('John', Title). If unsure, use a short natural language phrase."
-                        }
-                    },
-                    required: [],
-                    additionalProperties: false
-                };
-                
-                const defaultFetchDescription = 'Fetch a summary of client communication records from SharePoint. Returns multi-line text where each line is one record with fields separated by |.';
-                
-                if (userSettings.fetchDescription || powerAutomateConfig.fetchUrl) {
-                    const fetchSchema = userSettings.fetchSchema || defaultFetchSchema;
-                    const fetchDescription = userSettings.fetchDescription || defaultFetchDescription;
+                // Hardcoded fetch function for voice chat - always uses these exact settings
+                if (powerAutomateConfig.fetchUrl) {
                     defaultTools.push({
                         type: 'function',
                         name: 'fetchSharePointData',
-                        description: fetchDescription,
-                        parameters: fetchSchema
+                        description: 'Primary SharePoint search function for the ClientTrainingStatus list.\n\n**CRITICAL INSTRUCTION:** You MUST call this function FIRST before responding to ANY question about clients, orders, POs, training records, status, chase counts, last contact dates, notes, duplicates, or record counts. NEVER answer without calling this function first. NEVER make up or guess information. NEVER say "not found" or "refreshed" unless this function has actually been called and returned results.\n\nALWAYS use this function to READ data from ClientTrainingStatus. The `query` parameter must NEVER be empty and MUST be derived from what the user actually said. Examples: "PO557503", "order 557503", "records for Emma Gray", "all Neurobox cases awaiting install", "anything ready to book", or "ID gt 0" for a full refresh.\n\nIf you answer a data question without calling this function first, that is a CRITICAL ERROR.',
+                        parameters: {
+                            type: 'object',
+                            properties: {
+                                query: {
+                                    type: 'string',
+                                    description: 'REQUIRED - A short search phrase or OData-style filter describing what to retrieve from the ClientTrainingStatus SharePoint list. This must NEVER be empty and MUST be derived from what the user actually said. Examples: "PO557503", "order 557503", "records for Emma Gray", "all Neurobox cases awaiting install", "anything ready to book", or "ID gt 0" for a full refresh. DO NOT leave this empty or the function will fail.'
+                                }
+                            },
+                            required: ['query'],
+                            additionalProperties: false
+                        }
                     });
-                    await serverLog('info', 'Voice session - Added fetchSharePointData tool', {
-                        hasCustomSchema: !!userSettings.fetchSchema,
-                        hasCustomDescription: !!userSettings.fetchDescription,
-                        usingDefaults: !userSettings.fetchSchema || !userSettings.fetchDescription
+                    await serverLog('info', 'Voice session - Added fetchSharePointData tool with hardcoded settings', {
+                        description: 'Using hardcoded description and schema',
+                        ignoreUserSettings: true
                     });
                 }
                 
@@ -356,7 +357,24 @@ import Layout from '../layouts/Layout.astro';
                     type: 'session.update',
                     session: {
                         modalities: ['text', 'audio'],
-                        instructions: userSettings.instructions || 'You are a helpful assistant. Always respond in English.',
+                        instructions: `${userSettings.instructions || 'You are a helpful assistant. Always respond in English.'}
+
+CRITICAL FUNCTION CALLING REQUIREMENT:
+You MUST use the fetchSharePointData function for ANY question about SharePoint data, clients, orders, POs, training records, status, or any other data-related query. 
+
+BEFORE responding to the user with ANY information about data:
+1. ALWAYS call fetchSharePointData FIRST
+2. WAIT for the function result
+3. ONLY THEN respond based on the actual data returned
+
+NEVER EVER:
+- Respond with data without calling the function first
+- Say "not found" without calling the function
+- Say "refreshed" without calling the function  
+- Make up or assume data values
+- Guess what the data might be
+
+If the user asks about data, your FIRST action MUST be to call fetchSharePointData. Responding with data without calling this function is a CRITICAL ERROR.`,
                         voice: voice || 'alloy',
                         input_audio_format: 'pcm16',
                         output_audio_format: 'pcm16',
@@ -380,9 +398,12 @@ import Layout from '../layouts/Layout.astro';
                     sessionConfig.session.tool_choice = 'auto';
                     await serverLog('info', 'Voice session - Sending session.update with tools', {
                         toolCount: defaultTools.length,
-                        tools: defaultTools,
+                        toolNames: defaultTools.map((t: any) => t.name),
+                        fetchToolDescription: defaultTools.find((t: any) => t.name === 'fetchSharePointData')?.description?.substring(0, 200),
                         voice: sessionConfig.session.voice,
-                        model: model
+                        model: model,
+                        instructionsLength: sessionConfig.session.instructions.length,
+                        instructionsPreview: sessionConfig.session.instructions.substring(0, 300)
                     });
                 } else {
                     await serverLog('warn', 'Voice session - No tools configured', {
@@ -410,14 +431,102 @@ import Layout from '../layouts/Layout.astro';
                         await serverLog('info', 'Voice session - Session updated confirmed', {
                             hasTools: !!data.session?.tools,
                             toolCount: data.session?.tools?.length || 0,
-                            toolNames: data.session?.tools?.map((t: any) => t.name) || []
+                            toolNames: data.session?.tools?.map((t: any) => t.name) || [],
+                            toolDetails: data.session?.tools || []
                         });
+                        break;
+                    
+                    case 'response.created':
+                        await serverLog('info', 'Voice session - Response created', {
+                            responseId: data.response?.id
+                        });
+                        break;
+                    
+                    case 'response.output_item.added':
+                        await serverLog('info', 'Voice session - Output item added', {
+                            itemType: data.item?.type,
+                            itemId: data.item?.id
+                        });
+                        break;
+                    
+                    case 'response.function_call_arguments.delta':
+                        await serverLog('debug', 'Voice session - Function call arguments delta', {
+                            callId: data.call_id,
+                            delta: data.delta
+                        });
+                        break;
+                    
+                    case 'response.function_call_arguments.done':
+                        await serverLog('info', 'Voice session - Function call arguments complete', {
+                            callId: data.call_id,
+                            name: data.name,
+                            arguments: data.arguments
+                        });
+                        break;
+                    
+                    case 'input_audio_buffer.speech_started':
+                        isUserSpeaking = true;
+                        
+                        // ALWAYS stop all audio when user starts speaking, regardless of state
+                        if (audioContext) {
+                            await serverLog('info', 'Voice session - User interruption detected, stopping all audio', {
+                                currentTime: audioContext.currentTime,
+                                wasAssistantSpeaking: isAssistantSpeaking,
+                                activeSourcesCount: activeAudioSources.length
+                            });
+                            
+                            // Stop all currently playing or scheduled audio sources
+                            activeAudioSources.forEach(source => {
+                                try {
+                                    source.stop();
+                                    source.disconnect();
+                                } catch (e) {
+                                    // Source may have already stopped naturally or been disconnected
+                                }
+                            });
+                            activeAudioSources = [];
+                            
+                            // Reset timeline to stop any scheduled audio
+                            nextAudioStartTime = audioContext.currentTime;
+                            
+                            // Cancel the current response to stop generating more audio
+                            if (ws && ws.readyState === WebSocket.OPEN) {
+                                ws.send(JSON.stringify({
+                                    type: 'response.cancel'
+                                }));
+                            }
+                            
+                            isAssistantSpeaking = false;
+                        }
+                        break;
+                    
+                    case 'input_audio_buffer.speech_stopped':
+                        isUserSpeaking = false;
+                        await serverLog('info', 'Voice session - User stopped speaking', {
+                            currentTime: audioContext?.currentTime,
+                            nextAudioStartTime: nextAudioStartTime
+                        });
+                        
+                        // User finished speaking, commit their audio and request response
+                        ws!.send(JSON.stringify({
+                            type: 'input_audio_buffer.commit'
+                        }));
+                        
+                        ws!.send(JSON.stringify({
+                            type: 'response.create'
+                        }));
                         break;
                     
                     case 'conversation.item.input_audio_transcription.completed':
                         if (data.transcript) {
                             addMessage(data.transcript, 'user');
                             sessionTranscript.push({role: 'user', content: data.transcript});
+                            
+                            await serverLog('info', 'Voice session - User transcript complete', {
+                                transcript: data.transcript,
+                                transcriptLength: data.transcript.length,
+                                looksLikeDataQuery: /\b(po|order|client|status|record|data|info|information|tell me|what|how many|list|show|find|search)\b/i.test(data.transcript)
+                            });
                         }
                         break;
                     
@@ -428,30 +537,83 @@ import Layout from '../layouts/Layout.astro';
                         if (data.transcript) {
                             addMessage(data.transcript, 'assistant');
                             sessionTranscript.push({role: 'assistant', content: data.transcript});
+                            
+                            await serverLog('info', 'Voice session - Assistant transcript complete', {
+                                transcript: data.transcript,
+                                transcriptLength: data.transcript.length
+                            });
+                        }
+                        break;
+                    
+                    case 'response.done':
+                        isAssistantSpeaking = false;
+                        
+                        const hasTextResponse = data.response?.output?.some((item: any) => 
+                            item.type === 'message' && item.content?.some((c: any) => c.type === 'text')
+                        );
+                        const hasFunctionCall = data.response?.output?.some((item: any) => 
+                            item.type === 'function_call'
+                        );
+                        
+                        await serverLog('info', 'Voice session - Response cycle complete', {
+                            responseId: data.response?.id,
+                            status: data.response?.status,
+                            hasOutput: !!data.response?.output,
+                            outputCount: data.response?.output?.length || 0,
+                            outputTypes: data.response?.output?.map((item: any) => item.type) || [],
+                            hasTextResponse,
+                            hasFunctionCall,
+                            outputDetails: data.response?.output || []
+                        });
+                        
+                        // Warning: if assistant responded with text but no function call, it may be hallucinating
+                        if (hasTextResponse && !hasFunctionCall) {
+                            await serverLog('warn', 'Voice session - Assistant responded with text but NO function call', {
+                                responseId: data.response?.id,
+                                output: data.response?.output
+                            });
                         }
                         break;
                     
                     case 'response.audio.delta':
                         if (data.delta && audioContext) {
-                            const audioData = atob(data.delta);
-                            const int16Array = new Int16Array(audioData.length / 2);
-                            for (let i = 0; i < int16Array.length; i++) {
-                                int16Array[i] = (audioData.charCodeAt(i * 2 + 1) << 8) | audioData.charCodeAt(i * 2);
+                            // Only play audio if user is not currently speaking
+                            if (!isUserSpeaking) {
+                                isAssistantSpeaking = true;
+                                const audioData = atob(data.delta);
+                                const int16Array = new Int16Array(audioData.length / 2);
+                                for (let i = 0; i < int16Array.length; i++) {
+                                    int16Array[i] = (audioData.charCodeAt(i * 2 + 1) << 8) | audioData.charCodeAt(i * 2);
+                                }
+                                const float32Array = new Float32Array(int16Array.length);
+                                for (let i = 0; i < int16Array.length; i++) {
+                                    float32Array[i] = int16Array[i] / 32768.0;
+                                }
+                                const audioBuffer = audioContext.createBuffer(1, float32Array.length, 24000);
+                                audioBuffer.getChannelData(0).set(float32Array);
+                                const source = audioContext.createBufferSource();
+                                source.buffer = audioBuffer;
+                                source.connect(audioContext.destination);
+                                
+                                // Track this source so we can stop it on interruption
+                                activeAudioSources.push(source);
+                                
+                                // Remove from tracking when it finishes naturally
+                                source.onended = () => {
+                                    const index = activeAudioSources.indexOf(source);
+                                    if (index > -1) {
+                                        activeAudioSources.splice(index, 1);
+                                    }
+                                };
+                                
+                                const currentTime = audioContext.currentTime;
+                                const startTime = Math.max(currentTime, nextAudioStartTime);
+                                source.start(startTime);
+                                nextAudioStartTime = startTime + audioBuffer.duration;
+                            } else {
+                                // User is speaking, discard incoming audio
+                                await serverLog('debug', 'Voice session - Discarding audio delta because user is speaking');
                             }
-                            const float32Array = new Float32Array(int16Array.length);
-                            for (let i = 0; i < int16Array.length; i++) {
-                                float32Array[i] = int16Array[i] / 32768.0;
-                            }
-                            const audioBuffer = audioContext.createBuffer(1, float32Array.length, 24000);
-                            audioBuffer.getChannelData(0).set(float32Array);
-                            const source = audioContext.createBufferSource();
-                            source.buffer = audioBuffer;
-                            source.connect(audioContext.destination);
-                            
-                            const currentTime = audioContext.currentTime;
-                            const startTime = Math.max(currentTime, nextAudioStartTime);
-                            source.start(startTime);
-                            nextAudioStartTime = startTime + audioBuffer.duration;
                         }
                         break;
 
@@ -467,26 +629,57 @@ import Layout from '../layouts/Layout.astro';
                             announceStatus('Fetching information');
                             await serverLog('info', 'Voice session - Processing function call', {
                                 functionName: data.item.name,
-                                arguments: data.item.arguments
+                                callId: data.item.call_id,
+                                rawArguments: data.item.arguments
                             });
                             const args = JSON.parse(data.item.arguments);
+                            
+                            await serverLog('info', 'Voice session - Function call parsed arguments', {
+                                functionName: data.item.name,
+                                parsedArgs: args
+                            });
                             
                             try {
                                 let result;
                                 if (data.item.name === 'fetchSharePointData') {
+                                    await serverLog('info', 'Voice session - Calling fetchSharePointData', {
+                                        fetchUrl: powerAutomateConfig.fetchUrl,
+                                        query: args.query || ''
+                                    });
+                                    
                                     const response = await fetch(powerAutomateConfig.fetchUrl, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({ query: args.query || '' })
                                     });
                                     
+                                    await serverLog('info', 'Voice session - fetchSharePointData response received', {
+                                        status: response.status,
+                                        statusText: response.statusText,
+                                        ok: response.ok
+                                    });
+                                    
                                     if (!response.ok) {
                                         const text = await response.text();
+                                        await serverLog('error', 'Voice session - fetchSharePointData failed', {
+                                            status: response.status,
+                                            responseText: text.substring(0, 500)
+                                        });
                                         throw new Error(`Fetch Flow returned status ${response.status}. Response: ${text.substring(0, 200)}`);
                                     }
                                     
                                     result = await response.json();
+                                    
+                                    await serverLog('info', 'Voice session - fetchSharePointData result parsed', {
+                                        resultPreview: JSON.stringify(result).substring(0, 300),
+                                        resultType: typeof result,
+                                        hasData: !!result
+                                    });
                                 } else if (data.item.name === 'performSharePointAction') {
+                                    await serverLog('info', 'Voice session - Calling performSharePointAction', {
+                                        actionUrl: powerAutomateConfig.actionUrl
+                                    });
+                                    
                                     const response = await fetch(powerAutomateConfig.actionUrl, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
@@ -500,6 +693,10 @@ import Layout from '../layouts/Layout.astro';
                                     
                                     result = await response.json();
                                 } else if (data.item.name === 'manageSharePointItem') {
+                                    await serverLog('info', 'Voice session - Calling manageSharePointItem', {
+                                        manageUrl: powerAutomateConfig.manageUrl
+                                    });
+                                    
                                     const response = await fetch(powerAutomateConfig.manageUrl, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
@@ -516,9 +713,11 @@ import Layout from '../layouts/Layout.astro';
 
                                 announceStatus('Processing response');
                                 
-                                await serverLog('info', 'Voice session - Sending function result', {
+                                await serverLog('info', 'Voice session - Sending function result back to assistant', {
                                     callId: data.item.call_id,
-                                    resultPreview: JSON.stringify(result).substring(0, 200)
+                                    functionName: data.item.name,
+                                    resultPreview: JSON.stringify(result).substring(0, 300),
+                                    resultLength: JSON.stringify(result).length
                                 });
                                 
                                 ws!.send(JSON.stringify({
@@ -530,6 +729,8 @@ import Layout from '../layouts/Layout.astro';
                                     }
                                 }));
                                 
+                                await serverLog('info', 'Voice session - Requesting new response after function result');
+                                
                                 ws!.send(JSON.stringify({
                                     type: 'response.create'
                                 }));
@@ -538,7 +739,8 @@ import Layout from '../layouts/Layout.astro';
                                 
                                 await serverLog('error', 'Voice session - Function execution error', {
                                     error: errorMessage,
-                                    functionName: data.item.name
+                                    functionName: data.item.name,
+                                    stack: error instanceof Error ? error.stack : undefined
                                 });
                                 
                                 announceStatus(`Error: ${errorMessage}`);
@@ -611,6 +813,8 @@ import Layout from '../layouts/Layout.astro';
         }
         
         nextAudioStartTime = 0;
+        isUserSpeaking = false;
+        isAssistantSpeaking = false;
 
         connectButton.classList.remove('hidden');
         disconnectButton.classList.add('hidden');
@@ -674,14 +878,14 @@ import Layout from '../layouts/Layout.astro';
                 properties: {
                     query: {
                         type: 'string',
-                        description: "Optional natural-language description or OData-style filter for which records you want. For example: 'conversations awaiting response', 'software installed awaiting hours', or an OData expression like substringof('John', Title). If unsure, use a short natural language phrase."
+                        description: "A short search phrase or OData-style filter describing what to retrieve from the ClientTrainingStatus SharePoint list. This must NEVER be empty and MUST be derived from what the user actually said. Examples: \"PO557503\", \"order 557503\", \"records for Emma Gray\", \"all Neurobox cases awaiting install\", \"anything ready to book\", or \"ID gt 0\" for a full refresh."
                     }
                 },
-                required: [],
+                required: ['query'],
                 additionalProperties: false
             };
             
-            const defaultFetchDescription = 'Fetch a summary of client communication records from SharePoint. Returns multi-line text where each line is one record with fields separated by |.';
+            const defaultFetchDescription = 'Primary SharePoint search function for the ClientTrainingStatus list.\n\nALWAYS use this function to READ data from ClientTrainingStatus. For any question about clients, orders/POs, training records, status, chase counts, last contact dates, notes, duplicates, or record counts, you MUST call this function FIRST, before answering or calling any update/booking/email functions. The `query` parameter must never be empty: always derive it from what the user actually said (spoken digits for POs, names, email addresses, source names like Neurobox or EnablingTech, status filters, or `ID gt 0` for a full refresh). Never say "not found" or "refreshed" unless this function has actually been called and returned no matching records.';
             
             if (userSettings.fetchDescription || powerAutomateConfig.fetchUrl) {
                 const fetchSchema = userSettings.fetchSchema || defaultFetchSchema;
