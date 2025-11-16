@@ -166,46 +166,41 @@ import Layout from '../layouts/Layout.astro';
         try {
             const response = await fetch('/api/save-config');
             if (response.ok) {
-                const data = await response.json();
-                if (data.exists) {
+                const config = await response.json();
+                if (config.exists) {
                     hasExistingConfig = true;
                     resetBtn.classList.remove('hidden');
+                        
+                    if (config.lastUpdated) {
+                        const lastUpdated = new Date(config.lastUpdated);
+                        configStatusText.textContent = `Last updated: ${lastUpdated.toLocaleString()}`;
+                        configStatusBanner.classList.remove('hidden');
+                    }
                     
-                    const configResponse = await fetch('/api/get-config');
-                    if (configResponse.ok) {
-                        const config = await configResponse.json();
-                        
-                        if (config.lastUpdated) {
-                            const lastUpdated = new Date(config.lastUpdated);
-                            configStatusText.textContent = `Last updated: ${lastUpdated.toLocaleString()}`;
-                            configStatusBanner.classList.remove('hidden');
-                        }
-                        
-                        if (config.configHistory) {
-                            configMetadata.configHistory = config.configHistory;
-                        }
-                        
-                        if (config.openaiKey) {
-                            const maskedKey = maskApiKey(config.openaiKey);
-                            (document.getElementById('openai-key') as HTMLInputElement).value = maskedKey;
-                            (document.getElementById('openai-key') as HTMLInputElement).dataset.fullKey = config.openaiKey;
-                            (document.getElementById('openai-key') as HTMLInputElement).placeholder = 'Enter new key or leave as is';
-                        }
-                        if (config.openaiModel) {
-                            (document.getElementById('openai-model') as HTMLSelectElement).value = config.openaiModel;
-                        }
-                        if (config.voice) {
-                            (document.getElementById('voice-selection') as HTMLSelectElement).value = config.voice;
-                        }
-                        if (config.fetchUrl) {
-                            (document.getElementById('fetch-url') as HTMLInputElement).value = config.fetchUrl;
-                        }
-                        if (config.actionUrl) {
-                            (document.getElementById('action-url') as HTMLInputElement).value = config.actionUrl;
-                        }
-                        if (config.manageUrl) {
-                            (document.getElementById('manage-url') as HTMLInputElement).value = config.manageUrl;
-                        }
+                    if (config.configHistory) {
+                        configMetadata.configHistory = config.configHistory;
+                    }
+                    
+                    if (config.openaiKey) {
+                        const maskedKey = maskApiKey(config.openaiKey);
+                        (document.getElementById('openai-key') as HTMLInputElement).value = maskedKey;
+                        (document.getElementById('openai-key') as HTMLInputElement).dataset.fullKey = config.openaiKey;
+                        (document.getElementById('openai-key') as HTMLInputElement).placeholder = 'Enter new key or leave as is';
+                    }
+                    if (config.openaiModel) {
+                        (document.getElementById('openai-model') as HTMLSelectElement).value = config.openaiModel;
+                    }
+                    if (config.voice) {
+                        (document.getElementById('voice-selection') as HTMLSelectElement).value = config.voice;
+                    }
+                    if (config.fetchUrl) {
+                        (document.getElementById('fetch-url') as HTMLInputElement).value = config.fetchUrl;
+                    }
+                    if (config.actionUrl) {
+                        (document.getElementById('action-url') as HTMLInputElement).value = config.actionUrl;
+                    }
+                    if (config.manageUrl) {
+                        (document.getElementById('manage-url') as HTMLInputElement).value = config.manageUrl;
                     }
                 }
             }

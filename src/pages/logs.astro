@@ -1,0 +1,91 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Debug Logs">
+    <main class="mx-auto max-w-6xl px-4 py-8">
+        <h1 class="text-3xl font-bold mb-6">Voice Chat Debug Logs</h1>
+        
+        <div class="mb-4 flex gap-2">
+            <button id="refresh-button" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                Refresh Logs
+            </button>
+            <button id="clear-button" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
+                Clear Display
+            </button>
+            <select id="filter-level" class="px-4 py-2 border rounded">
+                <option value="">All Levels</option>
+                <option value="info">Info Only</option>
+                <option value="error">Errors Only</option>
+            </select>
+        </div>
+        
+        <div id="logs-container" class="bg-gray-900 text-green-400 p-4 rounded font-mono text-sm overflow-auto" style="max-height: 80vh;">
+            <div class="text-gray-500">Click "Refresh Logs" to load recent logs...</div>
+        </div>
+    </main>
+</Layout>
+
+<script>
+    const logsContainer = document.getElementById('logs-container') as HTMLDivElement;
+    const refreshButton = document.getElementById('refresh-button') as HTMLButtonElement;
+    const clearButton = document.getElementById('clear-button') as HTMLButtonElement;
+    const filterLevel = document.getElementById('filter-level') as HTMLSelectElement;
+    
+    async function loadLogs() {
+        try {
+            refreshButton.disabled = true;
+            refreshButton.textContent = 'Loading...';
+            
+            const level = filterLevel.value;
+            const url = level ? `/api/log?level=${level}&limit=200` : '/api/log?limit=200';
+            
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error('Failed to load logs');
+            }
+            
+            const logs = await response.json();
+            
+            if (logs.length === 0) {
+                logsContainer.innerHTML = '<div class="text-gray-500">No logs found. Start using voice chat to generate logs.</div>';
+            } else {
+                logsContainer.innerHTML = logs.map((log: any) => {
+                    const levelColor = log.level === 'error' ? 'text-red-400' : 
+                                     log.level === 'warn' ? 'text-yellow-400' : 
+                                     'text-green-400';
+                    
+                    const timestamp = new Date(log.timestamp).toLocaleTimeString();
+                    const dataStr = log.data ? `\\n${JSON.stringify(log.data, null, 2)}` : '';
+                    
+                    return `<div class="mb-2 pb-2 border-b border-gray-700">
+                        <span class="text-gray-500">[${timestamp}]</span>
+                        <span class="${levelColor} font-bold">[${log.level.toUpperCase()}]</span>
+                        <span class="text-white">${escapeHtml(log.message)}</span>
+                        ${dataStr ? `<pre class="ml-4 mt-1 text-gray-300 text-xs">${escapeHtml(dataStr)}</pre>` : ''}
+                    </div>`;
+                }).join('');
+            }
+        } catch (error) {
+            logsContainer.innerHTML = `<div class="text-red-400">Error loading logs: ${error instanceof Error ? error.message : 'Unknown error'}</div>`;
+        } finally {
+            refreshButton.disabled = false;
+            refreshButton.textContent = 'Refresh Logs';
+        }
+    }
+    
+    function escapeHtml(text: string): string {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    refreshButton.addEventListener('click', loadLogs);
+    clearButton.addEventListener('click', () => {
+        logsContainer.innerHTML = '<div class="text-gray-500">Logs cleared. Click "Refresh Logs" to load again.</div>';
+    });
+    filterLevel.addEventListener('change', loadLogs);
+    
+    // Auto-refresh every 5 seconds
+    setInterval(loadLogs, 5000);
+</script>
