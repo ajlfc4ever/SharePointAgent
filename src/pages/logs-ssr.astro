@@ -1,0 +1,165 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { getStore } from '@netlify/blobs';
+
+let logs: any[] = [];
+let error: string | null = null;
+let summary: any = {};
+
+try {
+    const logStore = getStore('voice-chat-logs');
+    const { blobs } = await logStore.list();
+    
+    logs = await Promise.all(
+        blobs.map(async (blob) => {
+            const data = await logStore.get(blob.key, { type: 'json' });
+            return data;
+        })
+    );
+    
+    logs.sort((a: any, b: any) => {
+        return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+    });
+    
+    const sessionUpdated = logs.find((l: any) => l.message?.includes('Session updated confirmed'));
+    const functionCalls = logs.filter((l: any) => 
+        l.message?.includes('Processing function call') || 
+        l.message?.includes('function_call_arguments')
+    );
+    const userTranscripts = logs.filter((l: any) => l.message?.includes('User transcript complete'));
+    const warnings = logs.filter((l: any) => l.level === 'warn' || l.message?.includes('NO function call'));
+    const responseCycles = logs.filter((l: any) => l.message?.includes('Response cycle complete'));
+    
+    summary = {
+        totalLogs: logs.length,
+        hasSessionUpdated: !!sessionUpdated,
+        toolCount: sessionUpdated?.data?.toolCount || 0,
+        toolNames: sessionUpdated?.data?.toolNames || [],
+        functionCallCount: functionCalls.length,
+        userTranscriptCount: userTranscripts.length,
+        warningCount: warnings.length,
+        responseCycleCount: responseCycles.length,
+        sessionUpdated,
+        functionCalls,
+        userTranscripts,
+        warnings,
+        responseCycles
+    };
+} catch (e) {
+    error = e instanceof Error ? e.message : 'Unknown error';
+}
+---
+
+<Layout title="Debug Logs (Server-Side)">
+    <main class="mx-auto max-w-6xl px-4 py-8">
+        <h1 class="text-3xl font-bold mb-6">Voice Chat Debug Logs - Server-Side Rendered</h1>
+        
+        {error && (
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+                <p class="font-bold">Error loading logs:</p>
+                <p>{error}</p>
+            </div>
+        )}
+        
+        {!error && (
+            <>
+                <div class="bg-blue-100 border border-blue-400 text-blue-900 px-4 py-3 rounded mb-6">
+                    <h2 class="font-bold text-xl mb-2">Summary</h2>
+                    <ul class="list-disc ml-6 space-y-1">
+                        <li>Total logs: {summary.totalLogs}</li>
+                        <li>Session tools configured: {summary.hasSessionUpdated ? 'Yes' : 'No'}</li>
+                        {summary.hasSessionUpdated && (
+                            <>
+                                <li class="ml-4">Tool count: {summary.toolCount}</li>
+                                <li class="ml-4">Tool names: {summary.toolNames.join(', ')}</li>
+                            </>
+                        )}
+                        <li>Function calls detected: <strong>{summary.functionCallCount}</strong></li>
+                        <li>User transcripts: {summary.userTranscriptCount}</li>
+                        <li>Response cycles: {summary.responseCycleCount}</li>
+                        <li>Hallucination warnings: <strong class={summary.warningCount > 0 ? 'text-red-600' : ''}>{summary.warningCount}</strong></li>
+                    </ul>
+                </div>
+                
+                {summary.userTranscripts && summary.userTranscripts.length > 0 && (
+                    <div class="bg-green-100 border border-green-400 text-green-900 px-4 py-3 rounded mb-6">
+                        <h2 class="font-bold text-xl mb-2">User Said:</h2>
+                        <ul class="list-disc ml-6 space-y-2">
+                            {summary.userTranscripts.map((t: any) => (
+                                <li>
+                                    <strong>"{t.data?.transcript}"</strong>
+                                    <br />
+                                    <span class="text-sm">Looks like data query: {t.data?.looksLikeDataQuery ? 'Yes' : 'No'}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+                
+                {summary.responseCycles && summary.responseCycles.length > 0 && (
+                    <div class="bg-purple-100 border border-purple-400 text-purple-900 px-4 py-3 rounded mb-6">
+                        <h2 class="font-bold text-xl mb-2">Response Cycles:</h2>
+                        <ul class="list-disc ml-6 space-y-2">
+                            {summary.responseCycles.map((r: any) => (
+                                <li>
+                                    Response ID: {r.data?.responseId}
+                                    <br />
+                                    <span class="text-sm">Has text: {r.data?.hasTextResponse ? 'Yes' : 'No'}, Has function call: <strong class={r.data?.hasFunctionCall ? 'text-green-700' : 'text-red-700'}>{r.data?.hasFunctionCall ? 'Yes' : 'No'}</strong></span>
+                                    <br />
+                                    <span class="text-xs">Output types: {r.data?.outputTypes?.join(', ')}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+                
+                {summary.warnings && summary.warnings.length > 0 && (
+                    <div class="bg-red-100 border border-red-400 text-red-900 px-4 py-3 rounded mb-6">
+                        <h2 class="font-bold text-xl mb-2">⚠️ HALLUCINATION WARNINGS (Assistant answered WITHOUT calling function):</h2>
+                        <p class="mb-2">This is the problem! The assistant is responding with data without calling fetchSharePointData first.</p>
+                        {summary.warnings.map((w: any) => (
+                            <pre class="bg-red-50 p-2 rounded text-xs overflow-auto mb-2">{JSON.stringify(w, null, 2)}</pre>
+                        ))}
+                    </div>
+                )}
+                
+                {summary.functionCalls && summary.functionCalls.length > 0 ? (
+                    <div class="bg-yellow-100 border border-yellow-400 text-yellow-900 px-4 py-3 rounded mb-6">
+                        <h2 class="font-bold text-xl mb-2">Function Calls:</h2>
+                        {summary.functionCalls.map((f: any) => (
+                            <pre class="bg-yellow-50 p-2 rounded text-xs overflow-auto mb-2">{JSON.stringify(f, null, 2)}</pre>
+                        ))}
+                    </div>
+                ) : (
+                    <div class="bg-red-100 border border-red-600 text-red-900 px-4 py-3 rounded mb-6">
+                        <h2 class="font-bold text-xl mb-2">❌ NO FUNCTION CALLS FOUND</h2>
+                        <p>This is the problem! The assistant is NOT calling fetchSharePointData at all.</p>
+                    </div>
+                )}
+                
+                <div class="bg-gray-900 text-green-400 p-4 rounded font-mono text-xs overflow-auto" style="max-height: 60vh;">
+                    <h2 class="text-xl font-bold mb-4 text-white">Full Log Timeline:</h2>
+                    {logs.map((log: any) => {
+                        const levelColor = log.level === 'error' ? 'text-red-400' : 
+                                         log.level === 'warn' ? 'text-yellow-400' : 
+                                         log.level === 'debug' ? 'text-blue-400' :
+                                         'text-green-400';
+                        
+                        return (
+                            <div class="mb-2 pb-2 border-b border-gray-700">
+                                <div>
+                                    <span class="text-gray-500">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
+                                    <span class={`${levelColor} font-bold`}>[{log.level.toUpperCase()}]</span>
+                                    <span class="text-white">{log.message}</span>
+                                </div>
+                                {log.data && Object.keys(log.data).length > 0 && (
+                                    <pre class="ml-4 mt-1 text-gray-300 text-xs whitespace-pre-wrap">{JSON.stringify(log.data, null, 2)}</pre>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            </>
+        )}
+    </main>
+</Layout>
