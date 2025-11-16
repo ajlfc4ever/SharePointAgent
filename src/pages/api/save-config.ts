@@ -82,7 +82,15 @@ export const GET: APIRoute = async () => {
     return new Response(
       JSON.stringify({
         exists: true,
-        setupComplete: config.setupComplete || false
+        setupComplete: config.setupComplete || false,
+        openaiKey: config.openaiKey,
+        openaiModel: config.openaiModel,
+        voice: config.voice || 'alloy',
+        fetchUrl: config.fetchUrl,
+        actionUrl: config.actionUrl,
+        manageUrl: config.manageUrl,
+        lastUpdated: config.lastUpdated,
+        configHistory: config.configHistory || []
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );

@@ -2,6 +2,8 @@ import type { APIRoute } from 'astro';
 import OpenAI from 'openai/index.js';
 import { getStore } from '@netlify/blobs';
 
+export const prerender = false;
+
 const TOOL_DEFINITIONS = [
   {
     type: 'function' as const,
@@ -186,7 +188,8 @@ async function handleToolCall(toolName: string, toolArgs: any, config: any): Pro
 
 export const POST: APIRoute = async ({ request }) => {
   try {
-    const body = await request.json();
+    const text = await request.text();
+    const body = text ? JSON.parse(text) : {};
     const { message, conversation_id } = body;
 
     if (!message) {

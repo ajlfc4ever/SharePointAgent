@@ -15,7 +15,7 @@ import Layout from '../layouts/Layout.astro';
 
             <div class="border-t p-4 bg-gray-50">
                 <div id="text-chat-area" class="mb-4">
-                    <div class="flex gap-2">
+                    <div class="flex gap-2 mb-2">
                         <input 
                             type="text" 
                             id="text-input" 
@@ -29,6 +29,15 @@ import Layout from '../layouts/Layout.astro';
                             class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             Send
+                        </button>
+                    </div>
+                    <div class="flex justify-end">
+                        <button
+                            id="clear-session-button"
+                            aria-label="Clear conversation"
+                            class="px-4 py-1 text-sm bg-gray-500 text-white rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-400"
+                        >
+                            Clear Conversation
                         </button>
                     </div>
                 </div>
@@ -57,9 +66,6 @@ import Layout from '../layouts/Layout.astro';
             </div>
         </div>
 
-        <div class="mt-4 text-center">
-            <a href="/" class="text-blue-600 hover:text-blue-800 text-sm">Return Home</a>
-        </div>
     </main>
 </Layout>
 
@@ -83,6 +89,21 @@ import Layout from '../layouts/Layout.astro';
     let sessionTranscript: Array<{role: string, content: string}> = [];
     let userSettings: any = {};
     let nextAudioStartTime = 0;
+    let textChatHistory: Array<{role: string, content: string}> = [];
+    let settingsLoaded = false;
+    let settingsLoadPromise: Promise<void>;
+
+    async function serverLog(level: string, message: string, data?: any) {
+        try {
+            await fetch('/api/log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ level, message, data })
+            });
+        } catch (error) {
+            // Silently fail if logging fails
+        }
+    }
 
     async function loadSettings() {
         try {
@@ -96,6 +117,7 @@ import Layout from '../layouts/Layout.astro';
         } catch (error) {
             console.error('Failed to load settings:', error);
         }
+        settingsLoaded = true;
     }
 
     function announceStatus(message: string) {
@@ -115,7 +137,8 @@ import Layout from '../layouts/Layout.astro';
         }
     }
 
-    loadSettings();
+    // Start loading settings immediately
+    settingsLoadPromise = loadSettings();
     checkConfig();
 
     function addMessage(content: string, role: 'user' | 'assistant' | 'system', skipSystemDisplay: boolean = false) {
@@ -174,6 +197,12 @@ import Layout from '../layouts/Layout.astro';
 
     async function startVoiceSession() {
         try {
+            // Wait for settings to load before starting voice session
+            if (!settingsLoaded) {
+                updateStatus('Loading settings...');
+                await settingsLoadPromise;
+            }
+            
             updateStatus('Getting credentials...', true);
             
             const tokenResponse = await fetch('/api/realtime-token', {
@@ -198,6 +227,12 @@ import Layout from '../layouts/Layout.astro';
             }
 
             const { apiKey, model, voice, config: powerAutomateConfig } = await tokenResponse.json();
+            
+            await serverLog('info', 'Voice session - Configuration loaded', {
+                model: model,
+                voice: voice,
+                hasApiKey: !!apiKey
+            });
 
             updateStatus('Requesting microphone access...', true);
             mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -255,12 +290,42 @@ import Layout from '../layouts/Layout.astro';
 
                 const defaultTools = [];
                 
-                if (userSettings.fetchDescription && userSettings.fetchSchema) {
+                await serverLog('info', 'Voice session - Building tools', {
+                    hasFetchDesc: !!userSettings.fetchDescription,
+                    hasFetchSchema: !!userSettings.fetchSchema,
+                    hasActionDesc: !!userSettings.actionDescription,
+                    hasActionSchema: !!userSettings.actionSchema,
+                    hasManageDesc: !!userSettings.manageDescription,
+                    hasManageSchema: !!userSettings.manageSchema
+                });
+                
+                const defaultFetchSchema = {
+                    type: 'object',
+                    properties: {
+                        query: {
+                            type: 'string',
+                            description: "Optional natural-language description or OData-style filter for which records you want. For example: 'conversations awaiting response', 'software installed awaiting hours', or an OData expression like substringof('John', Title). If unsure, use a short natural language phrase."
+                        }
+                    },
+                    required: [],
+                    additionalProperties: false
+                };
+                
+                const defaultFetchDescription = 'Fetch a summary of client communication records from SharePoint. Returns multi-line text where each line is one record with fields separated by |.';
+                
+                if (userSettings.fetchDescription || powerAutomateConfig.fetchUrl) {
+                    const fetchSchema = userSettings.fetchSchema || defaultFetchSchema;
+                    const fetchDescription = userSettings.fetchDescription || defaultFetchDescription;
                     defaultTools.push({
                         type: 'function',
                         name: 'fetchSharePointData',
-                        description: userSettings.fetchDescription,
-                        parameters: userSettings.fetchSchema
+                        description: fetchDescription,
+                        parameters: fetchSchema
+                    });
+                    await serverLog('info', 'Voice session - Added fetchSharePointData tool', {
+                        hasCustomSchema: !!userSettings.fetchSchema,
+                        hasCustomDescription: !!userSettings.fetchDescription,
+                        usingDefaults: !userSettings.fetchSchema || !userSettings.fetchDescription
                     });
                 }
                 
@@ -281,17 +346,23 @@ import Layout from '../layouts/Layout.astro';
                         parameters: userSettings.manageSchema
                     });
                 }
+                
+                await serverLog('info', 'Voice session - Tools configured', {
+                    toolCount: defaultTools.length,
+                    toolNames: defaultTools.map(t => t.name)
+                });
 
                 const sessionConfig: any = {
                     type: 'session.update',
                     session: {
                         modalities: ['text', 'audio'],
-                        instructions: userSettings.instructions || 'You are a helpful assistant.',
+                        instructions: userSettings.instructions || 'You are a helpful assistant. Always respond in English.',
                         voice: voice || 'alloy',
                         input_audio_format: 'pcm16',
                         output_audio_format: 'pcm16',
                         input_audio_transcription: {
-                            model: 'whisper-1'
+                            model: 'whisper-1',
+                            language: 'en'
                         },
                         turn_detection: {
                             type: 'server_vad',
@@ -299,13 +370,25 @@ import Layout from '../layouts/Layout.astro';
                             prefix_padding_ms: userSettings.prefixPadding !== undefined ? userSettings.prefixPadding : 300,
                             silence_duration_ms: userSettings.silenceDuration !== undefined ? userSettings.silenceDuration : 500
                         },
-                        temperature: userSettings.temperature !== undefined ? userSettings.temperature : 0.8
+                        temperature: userSettings.temperature !== undefined ? userSettings.temperature : 0.8,
+                        max_response_output_tokens: 4096
                     }
                 };
                 
                 if (defaultTools.length > 0) {
                     sessionConfig.session.tools = defaultTools;
                     sessionConfig.session.tool_choice = 'auto';
+                    await serverLog('info', 'Voice session - Sending session.update with tools', {
+                        toolCount: defaultTools.length,
+                        tools: defaultTools,
+                        voice: sessionConfig.session.voice,
+                        model: model
+                    });
+                } else {
+                    await serverLog('warn', 'Voice session - No tools configured', {
+                        voice: sessionConfig.session.voice,
+                        model: model
+                    });
                 }
                 
                 ws!.send(JSON.stringify(sessionConfig));
@@ -314,7 +397,23 @@ import Layout from '../layouts/Layout.astro';
             ws.addEventListener('message', async (event) => {
                 const data = JSON.parse(event.data);
                 
+                // Log all non-audio events for debugging
+                if (!data.type.includes('audio.delta') && !data.type.includes('audio_transcript.delta')) {
+                    await serverLog('debug', 'Voice session - Received event', { 
+                        type: data.type,
+                        data: JSON.stringify(data).substring(0, 500)
+                    });
+                }
+                
                 switch (data.type) {
+                    case 'session.updated':
+                        await serverLog('info', 'Voice session - Session updated confirmed', {
+                            hasTools: !!data.session?.tools,
+                            toolCount: data.session?.tools?.length || 0,
+                            toolNames: data.session?.tools?.map((t: any) => t.name) || []
+                        });
+                        break;
+                    
                     case 'conversation.item.input_audio_transcription.completed':
                         if (data.transcript) {
                             addMessage(data.transcript, 'user');
@@ -356,135 +455,77 @@ import Layout from '../layouts/Layout.astro';
                         }
                         break;
 
-                    case 'response.function_call_arguments.done':
-                        if (data.name) {
+                    case 'response.output_item.done':
+                        await serverLog('info', 'Voice session - output_item.done', {
+                            itemType: data.item?.type,
+                            itemName: data.item?.name,
+                            hasCallId: !!data.item?.call_id,
+                            hasArguments: !!data.item?.arguments
+                        });
+                        
+                        if (data.item?.type === 'function_call' && data.item?.name) {
                             announceStatus('Fetching information');
-                            const args = JSON.parse(data.arguments);
+                            await serverLog('info', 'Voice session - Processing function call', {
+                                functionName: data.item.name,
+                                arguments: data.item.arguments
+                            });
+                            const args = JSON.parse(data.item.arguments);
                             
                             try {
                                 let result;
-                                if (data.name === 'fetchSharePointData') {
-                                    console.log('Calling Fetch Flow:', powerAutomateConfig.fetchUrl);
+                                if (data.item.name === 'fetchSharePointData') {
                                     const response = await fetch(powerAutomateConfig.fetchUrl, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({ query: args.query || '' })
                                     });
                                     
-                                    console.log('Fetch Flow response status:', response.status);
-                                    const contentType = response.headers.get('content-type');
-                                    console.log('Fetch Flow content-type:', contentType);
-                                    
                                     if (!response.ok) {
                                         const text = await response.text();
-                                        console.error('Fetch Flow error response:', text.substring(0, 500));
-                                        throw new Error(`Fetch Flow (${powerAutomateConfig.fetchUrl}) returned status ${response.status}. Response: ${text.substring(0, 200)}`);
+                                        throw new Error(`Fetch Flow returned status ${response.status}. Response: ${text.substring(0, 200)}`);
                                     }
                                     
-                                    if (!contentType || !contentType.includes('application/json')) {
-                                        const text = await response.text();
-                                        console.error('Fetch Flow non-JSON response:', text.substring(0, 500));
-                                        throw new Error(`Fetch Flow (${powerAutomateConfig.fetchUrl}): Expected JSON but got ${contentType}. Response: ${text.substring(0, 200)}`);
-                                    }
-                                    
-                                    const responseText = await response.text();
-                                    console.log('Fetch Flow raw response:', responseText.substring(0, 500));
-                                    
-                                    if (!responseText || responseText.trim() === '') {
-                                        throw new Error(`Fetch Flow (${powerAutomateConfig.fetchUrl}): Returned empty response`);
-                                    }
-                                    
-                                    try {
-                                        result = JSON.parse(responseText);
-                                        console.log('Fetch Flow parsed successfully');
-                                    } catch (jsonError) {
-                                        console.error('Fetch Flow JSON parse error:', jsonError);
-                                        throw new Error(`Fetch Flow (${powerAutomateConfig.fetchUrl}): Invalid JSON - ${jsonError instanceof Error ? jsonError.message : 'Unknown error'}. Response: ${responseText.substring(0, 200)}`);
-                                    }
-                                } else if (data.name === 'performSharePointAction') {
-                                    console.log('Calling Action Flow:', powerAutomateConfig.actionUrl);
+                                    result = await response.json();
+                                } else if (data.item.name === 'performSharePointAction') {
                                     const response = await fetch(powerAutomateConfig.actionUrl, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify(args)
                                     });
                                     
-                                    console.log('Action Flow response status:', response.status);
-                                    const contentType = response.headers.get('content-type');
-                                    console.log('Action Flow content-type:', contentType);
-                                    
                                     if (!response.ok) {
                                         const text = await response.text();
-                                        console.error('Action Flow error response:', text.substring(0, 500));
-                                        throw new Error(`Action Flow (${powerAutomateConfig.actionUrl}) returned status ${response.status}. Response: ${text.substring(0, 200)}`);
+                                        throw new Error(`Action Flow returned status ${response.status}. Response: ${text.substring(0, 200)}`);
                                     }
                                     
-                                    if (!contentType || !contentType.includes('application/json')) {
-                                        const text = await response.text();
-                                        console.error('Action Flow non-JSON response:', text.substring(0, 500));
-                                        throw new Error(`Action Flow (${powerAutomateConfig.actionUrl}): Expected JSON but got ${contentType}. Response: ${text.substring(0, 200)}`);
-                                    }
-                                    
-                                    const responseText = await response.text();
-                                    console.log('Action Flow raw response:', responseText.substring(0, 500));
-                                    
-                                    if (!responseText || responseText.trim() === '') {
-                                        throw new Error(`Action Flow (${powerAutomateConfig.actionUrl}): Returned empty response`);
-                                    }
-                                    
-                                    try {
-                                        result = JSON.parse(responseText);
-                                        console.log('Action Flow parsed successfully');
-                                    } catch (jsonError) {
-                                        console.error('Action Flow JSON parse error:', jsonError);
-                                        throw new Error(`Action Flow (${powerAutomateConfig.actionUrl}): Invalid JSON - ${jsonError instanceof Error ? jsonError.message : 'Unknown error'}. Response: ${responseText.substring(0, 200)}`);
-                                    }
-                                } else if (data.name === 'manageSharePointItem') {
-                                    console.log('Calling Manage Flow:', powerAutomateConfig.manageUrl);
+                                    result = await response.json();
+                                } else if (data.item.name === 'manageSharePointItem') {
                                     const response = await fetch(powerAutomateConfig.manageUrl, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify(args)
                                     });
                                     
-                                    console.log('Manage Flow response status:', response.status);
-                                    const contentType = response.headers.get('content-type');
-                                    console.log('Manage Flow content-type:', contentType);
-                                    
                                     if (!response.ok) {
                                         const text = await response.text();
-                                        console.error('Manage Flow error response:', text.substring(0, 500));
-                                        throw new Error(`Manage Flow (${powerAutomateConfig.manageUrl}) returned status ${response.status}. Response: ${text.substring(0, 200)}`);
+                                        throw new Error(`Manage Flow returned status ${response.status}. Response: ${text.substring(0, 200)}`);
                                     }
                                     
-                                    if (!contentType || !contentType.includes('application/json')) {
-                                        const text = await response.text();
-                                        console.error('Manage Flow non-JSON response:', text.substring(0, 500));
-                                        throw new Error(`Manage Flow (${powerAutomateConfig.manageUrl}): Expected JSON but got ${contentType}. Response: ${text.substring(0, 200)}`);
-                                    }
-                                    
-                                    const responseText = await response.text();
-                                    console.log('Manage Flow raw response:', responseText.substring(0, 500));
-                                    
-                                    if (!responseText || responseText.trim() === '') {
-                                        throw new Error(`Manage Flow (${powerAutomateConfig.manageUrl}): Returned empty response`);
-                                    }
-                                    
-                                    try {
-                                        result = JSON.parse(responseText);
-                                        console.log('Manage Flow parsed successfully');
-                                    } catch (jsonError) {
-                                        console.error('Manage Flow JSON parse error:', jsonError);
-                                        throw new Error(`Manage Flow (${powerAutomateConfig.manageUrl}): Invalid JSON - ${jsonError instanceof Error ? jsonError.message : 'Unknown error'}. Response: ${responseText.substring(0, 200)}`);
-                                    }
+                                    result = await response.json();
                                 }
 
                                 announceStatus('Processing response');
+                                
+                                await serverLog('info', 'Voice session - Sending function result', {
+                                    callId: data.item.call_id,
+                                    resultPreview: JSON.stringify(result).substring(0, 200)
+                                });
+                                
                                 ws!.send(JSON.stringify({
                                     type: 'conversation.item.create',
                                     item: {
                                         type: 'function_call_output',
-                                        call_id: data.call_id,
+                                        call_id: data.item.call_id,
                                         output: JSON.stringify(result)
                                     }
                                 }));
@@ -494,13 +535,18 @@ import Layout from '../layouts/Layout.astro';
                                 }));
                             } catch (error) {
                                 const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                                console.error('Function call error:', error);
+                                
+                                await serverLog('error', 'Voice session - Function execution error', {
+                                    error: errorMessage,
+                                    functionName: data.item.name
+                                });
+                                
                                 announceStatus(`Error: ${errorMessage}`);
                                 ws!.send(JSON.stringify({
                                     type: 'conversation.item.create',
                                     item: {
                                         type: 'function_call_output',
-                                        call_id: data.call_id,
+                                        call_id: data.item.call_id,
                                         output: JSON.stringify({ error: errorMessage })
                                     }
                                 }));
@@ -514,6 +560,10 @@ import Layout from '../layouts/Layout.astro';
 
                     case 'error':
                         console.error('Realtime API error:', data);
+                        await serverLog('error', 'Voice session - Realtime API error', {
+                            error: data.error,
+                            fullData: data
+                        });
                         addMessage(`Error: ${data.error?.message || 'Unknown error'}`, 'system');
                         break;
                 }
@@ -596,6 +646,11 @@ import Layout from '../layouts/Layout.astro';
         const message = textInput.value.trim();
         if (!message) return;
 
+        // Wait for settings to load before sending message
+        if (!settingsLoaded) {
+            await settingsLoadPromise;
+        }
+
         addMessage(message, 'user');
         textInput.value = '';
         sendTextButton.disabled = true;
@@ -614,13 +669,29 @@ import Layout from '../layouts/Layout.astro';
 
             const textChatTools = [];
             
-            if (userSettings.fetchDescription && userSettings.fetchSchema) {
+            const defaultFetchSchema = {
+                type: 'object',
+                properties: {
+                    query: {
+                        type: 'string',
+                        description: "Optional natural-language description or OData-style filter for which records you want. For example: 'conversations awaiting response', 'software installed awaiting hours', or an OData expression like substringof('John', Title). If unsure, use a short natural language phrase."
+                    }
+                },
+                required: [],
+                additionalProperties: false
+            };
+            
+            const defaultFetchDescription = 'Fetch a summary of client communication records from SharePoint. Returns multi-line text where each line is one record with fields separated by |.';
+            
+            if (userSettings.fetchDescription || powerAutomateConfig.fetchUrl) {
+                const fetchSchema = userSettings.fetchSchema || defaultFetchSchema;
+                const fetchDescription = userSettings.fetchDescription || defaultFetchDescription;
                 textChatTools.push({
                     type: 'function',
                     function: {
                         name: 'fetchSharePointData',
-                        description: userSettings.fetchDescription,
-                        parameters: userSettings.fetchSchema
+                        description: fetchDescription,
+                        parameters: fetchSchema
                     }
                 });
             }
@@ -647,6 +718,8 @@ import Layout from '../layouts/Layout.astro';
                 });
             }
 
+            textChatHistory.push({ role: 'user', content: message });
+
             const chatPayload: any = {
                 model: userSettings.textChatModel || 'gpt-4o',
                 messages: [
@@ -654,7 +727,7 @@ import Layout from '../layouts/Layout.astro';
                         role: 'system',
                         content: userSettings.instructions || 'You are a helpful assistant.'
                     },
-                    { role: 'user', content: message }
+                    ...textChatHistory
                 ],
                 temperature: userSettings.temperature !== undefined ? userSettings.temperature : 0.8
             };
@@ -753,7 +826,7 @@ import Layout from '../layouts/Layout.astro';
                             role: 'system',
                             content: userSettings.instructions || 'You are a helpful assistant.'
                         },
-                        { role: 'user', content: message },
+                        ...textChatHistory,
                         assistantMessage,
                         ...toolMessages
                     ],
@@ -784,10 +857,12 @@ import Layout from '../layouts/Layout.astro';
                 if (finalMessage.content) {
                     announceStatus('Response received');
                     addMessage(finalMessage.content, 'assistant');
+                    textChatHistory.push({ role: 'assistant', content: finalMessage.content });
                 }
             } else if (assistantMessage.content) {
                 announceStatus('Response received');
                 addMessage(assistantMessage.content, 'assistant');
+                textChatHistory.push({ role: 'assistant', content: assistantMessage.content });
             }
 
         } catch (error) {
@@ -798,7 +873,17 @@ import Layout from '../layouts/Layout.astro';
         }
     }
 
+    const clearSessionButton = document.getElementById('clear-session-button') as HTMLButtonElement;
+
+    function clearConversation() {
+        textChatHistory = [];
+        messagesContainer.innerHTML = '<div class="text-center text-gray-500 py-8"><p>Use voice or type to interact with the assistant.</p></div>';
+        isFirstMessage = true;
+        addMessage('Conversation cleared. Start a new conversation!', 'system', true);
+    }
+
     sendTextButton.addEventListener('click', sendTextMessage);
+    clearSessionButton.addEventListener('click', clearConversation);
     textInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             sendTextMessage();
