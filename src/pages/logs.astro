@@ -37,22 +37,34 @@ import Layout from '../layouts/Layout.astro';
             refreshButton.disabled = true;
             refreshButton.textContent = 'Loading...';
             
-            const level = filterLevel.value;
-            const url = level ? `/api/log?level=${level}&limit=200` : '/api/log?limit=200';
-            
-            const response = await fetch(url);
+            const response = await fetch('/api/get-logs');
             if (!response.ok) {
-                throw new Error('Failed to load logs');
+                const errorText = await response.text();
+                throw new Error(`Failed to load logs (${response.status}): ${errorText}`);
             }
             
-            const logs = await response.json();
+            const data = await response.json();
+            const allLogs = data.logs || [];
+            
+            const level = filterLevel.value;
+            const logs = level ? allLogs.filter((log: any) => log.level === level) : allLogs;
             
             if (logs.length === 0) {
-                logsContainer.innerHTML = '<div class="text-gray-500">No logs found. Start using voice chat to generate logs.</div>';
+                logsContainer.innerHTML = `<div class="text-gray-500">No logs found. Start using voice chat to generate logs.</div>
+                    <div class="text-xs text-gray-600 mt-4">
+                        <p>Debug info:</p>
+                        <ul class="list-disc ml-6 mt-2">
+                            <li>API endpoint: /api/get-logs</li>
+                            <li>Response status: ${response.status}</li>
+                            <li>Total logs in store: ${data.count || 0}</li>
+                            <li>Logs after filter: ${logs.length}</li>
+                        </ul>
+                    </div>`;
             } else {
                 logsContainer.innerHTML = logs.map((log: any) => {
                     const levelColor = log.level === 'error' ? 'text-red-400' : 
                                      log.level === 'warn' ? 'text-yellow-400' : 
+                                     log.level === 'debug' ? 'text-blue-400' :
                                      'text-green-400';
                     
                     const timestamp = new Date(log.timestamp).toLocaleTimeString();
@@ -67,7 +79,12 @@ import Layout from '../layouts/Layout.astro';
                 }).join('');
             }
         } catch (error) {
-            logsContainer.innerHTML = `<div class="text-red-400">Error loading logs: ${error instanceof Error ? error.message : 'Unknown error'}</div>`;
+            logsContainer.innerHTML = `<div class="text-red-400">
+                <p class="font-bold">Error loading logs:</p>
+                <p class="mt-2">${error instanceof Error ? error.message : 'Unknown error'}</p>
+                <p class="text-xs mt-4">Check browser console for more details.</p>
+            </div>`;
+            console.error('Failed to load logs:', error);
         } finally {
             refreshButton.disabled = false;
             refreshButton.textContent = 'Refresh Logs';

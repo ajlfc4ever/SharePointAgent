@@ -39,11 +39,20 @@ export default async (req: Request) => {
     
     // Create an ephemeral token for the client to use with the Realtime API
     // In production, you might want to create a session token with limited permissions
+    const voiceToUse = config.voice || 'alloy';
+    console.log('Realtime token - Returning configuration', {
+      hasApiKey: !!config.openaiKey,
+      model: config.openaiModel || 'gpt-4o-realtime-preview',
+      voice: voiceToUse,
+      voiceFromConfig: config.voice,
+      voiceFallback: !config.voice ? 'alloy (fallback)' : 'from config'
+    });
+    
     return new Response(
       JSON.stringify({
         apiKey: config.openaiKey,
         model: config.openaiModel || 'gpt-4o-realtime-preview',
-        voice: config.voice || 'alloy',
+        voice: voiceToUse,
         config: {
           fetchUrl: config.fetchUrl,
           actionUrl: config.actionUrl,
